@@ -7,20 +7,21 @@ const {
   updateCategory,
   deleteCategory
 } = require('../controllers/CategoryController');
+const { uploadCategoryImg } = require('../middleware/upload');
 
-// ✅ Create Category
-router.post('/create-category', createCategory);
+// :white_tick: Create Category
+router.post('/create-category', uploadCategoryImg.single('image'), createCategory);
 
-// ✅ Get All Categories
+// :white_tick: Get All Categories
 router.get('/allcategories', getAllCategories);
 
-// ✅ Get Category by ID
+// :white_tick: Get Category by ID
 router.get('/get-category/:categoryId', getCategoryById);
 
-// ✅ Update Category
+// :white_tick: Update Category
 router.put('/update-category/:categoryId', updateCategory);
 
-// ✅ Delete Category
+// :white_tick: Delete Category
 router.delete('/delete-category/:categoryId', deleteCategory);
 
 module.exports = router;

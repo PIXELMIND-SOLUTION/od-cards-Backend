@@ -1,29 +1,37 @@
 const Category = require('../models/Category');  // Importing the Category model
+const path = require('path');
 
-// ✅ Create Category
+
 exports.createCategory = async (req, res) => {
   try {
-    const { category, image } = req.body;
+    const { categoryName } = req.body;
 
-    // Check if the required fields are provided
-    if (!category || !image) {
-      return res.status(400).json({ message: 'Category name and image are required.' });
+    if (!req.file || !categoryName) {
+      return res.status(400).json({ message: 'categoryName and image are required.' });
     }
 
-    // Create a new category instance
+    // ✅ Get relative path from /uploads
+    const imagePath = path.relative(
+      path.join(__dirname, '..'),
+      req.file.path
+    ).replace(/\\/g, '/'); // Normalize for Windows paths
+
     const newCategory = new Category({
-        category,
-      image
+      category: categoryName,
+      image: imagePath, // Will be like "uploads/categoryImg/..."
     });
 
-    // Save the new category to the database
     const savedCategory = await newCategory.save();
-    res.status(201).json({ message: 'Category created successfully.', category: savedCategory });
+    res.status(201).json({
+      message: 'Category created successfully.',
+      category: savedCategory,
+    });
   } catch (error) {
-    console.error('Error in createCategory:', error);
+    console.error('Error creating category:', error);
     res.status(500).json({ message: 'Server error while creating category.' });
   }
 };
+
 
 // ✅ Get All Categories
 exports.getAllCategories = async (req, res) => {
