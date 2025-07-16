@@ -11,7 +11,7 @@ const productRoutes = require('./routes/productRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const policyRoutes = require('./routes/policiesRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
-const aboutRoutes  = require('./routes/aboutRoutes'); // ✅ use consistent casing
+const aboutRoutes  = require('./routes/AboutRoutes'); // ✅ use consistent casing
 const cardCategoryRoutes = require('./routes/cardCategoryRoutes');
 const AdminRoutes = require('./routes/AdminRoutes');
 
