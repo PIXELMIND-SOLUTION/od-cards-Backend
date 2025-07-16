@@ -79,8 +79,6 @@ const reviewStorage = multer.diskStorage({
 });
 
 
-<<<<<<< HEAD
-=======
 const faqImgPath = path.join(__dirname, '../uploads/faqs');
 ensureDir(faqImgPath);
 
@@ -93,17 +91,12 @@ const faqImageStorage = multer.diskStorage({
 
 
 
->>>>>>> 8a5b658 (16/07/25)
-
 // Multer instances
 const uploadAboutImage = multer({ storage: aboutStorage, fileFilter });
 const uploadCardCategoryImage = multer({ storage: cardCategoryStorage, fileFilter });
 
-<<<<<<< HEAD
-=======
 const uploadFAQImage = multer({ storage: faqImageStorage, fileFilter });
 
->>>>>>> 8a5b658 (16/07/25)
 const uploadCategoryImg = multer({ storage: categoryStorage, fileFilter });
 const uploadVisitingCardImg = multer({ storage: visitingCardStorage, fileFilter });
 const uploadBoardCardImg = multer({ storage: boardCardStorage, fileFilter });
@@ -118,12 +111,12 @@ module.exports = {
 
   // Added for About Us & Cards Section
   uploadAboutImageSingle: uploadAboutImage.single('image'),
-<<<<<<< HEAD
-  uploadCardCategoryImageSingle: uploadCardCategoryImage.single('image')
-=======
+
   uploadCardCategoryImageSingle: uploadCardCategoryImage.single('image'),
 
-    uploadFAQImageSingle: uploadFAQImage.single('image'), // Single image upload
+  uploadCardCategoryImageSingle: uploadCardCategoryImage.single('image'),
+
+  uploadFAQImageSingle: uploadFAQImage.single('image'), // Single image upload
   uploadFAQImageMultiple: uploadFAQImage.array('images', 10) // Multiple image upload
->>>>>>> 8a5b658 (16/07/25)
+
 };
