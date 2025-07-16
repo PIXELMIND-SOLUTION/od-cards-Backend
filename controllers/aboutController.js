@@ -1,4 +1,4 @@
-const About = require('../models/About');
+const About = require('../models/about');
 
 exports.createAbout = async (req, res) => {
   try {
