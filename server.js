@@ -9,8 +9,14 @@ const categoryRoutes = require('./routes/categoryRoutes');
 const path = require('path');
 const policyRoutes = require('./routes/policiesRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
+<<<<<<< HEAD
 const aboutRoutes  = require('./routes/AboutRoutes');
 const cardCategoryRoutes = require('./routes/cardCategoryRoutes');
+=======
+const aboutRoutes  = require('./routes/aboutRoutes');
+const cardCategoryRoutes = require('./routes/cardCategoryRoutes');
+const AdminRoutes = require('./routes/AdminRoutes');
+>>>>>>> 8a5b658 (16/07/25)
 
 
 
@@ -37,6 +43,10 @@ app.use("/api/policies", policyRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/aboutus", aboutRoutes);
 app.use("/api/aboutcard", cardCategoryRoutes);
+<<<<<<< HEAD
+=======
+app.use("/api/admin", AdminRoutes);
+>>>>>>> 8a5b658 (16/07/25)
 
 
 
