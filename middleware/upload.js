@@ -12,12 +12,38 @@ const fileFilter = (req, file, cb) => {
   cb(null, true);
 };
 
-// 1. Category Image Upload Configuration
-const categoryImgPath = path.join(__dirname, '../uploads/categoryImg');
-if (!fs.existsSync(categoryImgPath)) {
-  fs.mkdirSync(categoryImgPath, { recursive: true });
-}
+// Utility function to ensure directory exists
+const ensureDir = (dirPath) => {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+};
 
+// About Us Image Upload
+const aboutImgPath = path.join(__dirname, '../uploads/about');
+ensureDir(aboutImgPath);
+
+const aboutStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, aboutImgPath),
+  filename: (req, file, cb) => {
+    cb(null, `about_${Date.now()}${path.extname(file.originalname)}`);
+  }
+});
+
+// Card Category Image Upload
+const cardCategoryImgPath = path.join(__dirname, '../uploads/cardCategories');
+ensureDir(cardCategoryImgPath);
+
+const cardCategoryStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, cardCategoryImgPath),
+  filename: (req, file, cb) => {
+    cb(null, `card_category_${Date.now()}${path.extname(file.originalname)}`);
+  }
+});
+
+// Existing storage configs
+const categoryImgPath = path.join(__dirname, '../uploads/categoryImg');
+ensureDir(categoryImgPath);
 const categoryStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, categoryImgPath),
   filename: (req, file, cb) => {
@@ -25,12 +51,8 @@ const categoryStorage = multer.diskStorage({
   }
 });
 
-// 2. Visiting Card Upload Configuration
 const visitingCardPath = path.join(__dirname, '../uploads/visitingCards');
-if (!fs.existsSync(visitingCardPath)) {
-  fs.mkdirSync(visitingCardPath, { recursive: true });
-}
-
+ensureDir(visitingCardPath);
 const visitingCardStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, visitingCardPath),
   filename: (req, file, cb) => {
@@ -38,12 +60,8 @@ const visitingCardStorage = multer.diskStorage({
   }
 });
 
-// 3. Board Card Upload Configuration
 const boardCardPath = path.join(__dirname, '../uploads/boardVisitingCards');
-if (!fs.existsSync(boardCardPath)) {
-  fs.mkdirSync(boardCardPath, { recursive: true });
-}
-
+ensureDir(boardCardPath);
 const boardCardStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, boardCardPath),
   filename: (req, file, cb) => {
@@ -51,12 +69,8 @@ const boardCardStorage = multer.diskStorage({
   }
 });
 
-// 4. Review Image Upload Configuration
 const reviewImgPath = path.join(__dirname, '../uploads/reviews');
-if (!fs.existsSync(reviewImgPath)) {
-  fs.mkdirSync(reviewImgPath, { recursive: true });
-}
-
+ensureDir(reviewImgPath);
 const reviewStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, reviewImgPath),
   filename: (req, file, cb) => {
@@ -64,7 +78,12 @@ const reviewStorage = multer.diskStorage({
   }
 });
 
-// Create multer instances
+
+
+// Multer instances
+const uploadAboutImage = multer({ storage: aboutStorage, fileFilter });
+const uploadCardCategoryImage = multer({ storage: cardCategoryStorage, fileFilter });
+
 const uploadCategoryImg = multer({ storage: categoryStorage, fileFilter });
 const uploadVisitingCardImg = multer({ storage: visitingCardStorage, fileFilter });
 const uploadBoardCardImg = multer({ storage: boardCardStorage, fileFilter });
@@ -75,5 +94,9 @@ module.exports = {
   uploadVisitingCardImgSingle: uploadVisitingCardImg.single('image'),
   uploadVisitingCardImgMultiple: uploadVisitingCardImg.array('images', 10),
   uploadBoardCardImages: uploadBoardCardImg.array('images', 10),
-  uploadReviewImage: uploadReviewImg.single('image') // Single image upload for reviews
+  uploadReviewImage: uploadReviewImg.single('image'),
+
+  // Added for About Us & Cards Section
+  uploadAboutImageSingle: uploadAboutImage.single('image'),
+  uploadCardCategoryImageSingle: uploadCardCategoryImage.single('image')
 };
