@@ -9,7 +9,7 @@ const categoryRoutes = require('./routes/categoryRoutes');
 const path = require('path');
 const policyRoutes = require('./routes/policiesRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
-const aboutRoutes  = require('./routes/aboutRoutes');
+const aboutRoutes  = require('./routes/AboutRoutes');
 const cardCategoryRoutes = require('./routes/cardCategoryRoutes');
 
 
