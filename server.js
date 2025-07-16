@@ -17,7 +17,7 @@ const cardCategoryRoutes = require('./routes/cardCategoryRoutes');
 dotenv.config();
 connectDB();
 
-const app = express();
+const app = express(); 
 
 // Middleware
 app.use(express.json());
