@@ -5,7 +5,7 @@ const {
   getAbout,
   updateAbout,
   deleteAbout
-} = require('../controllers/AboutController');
+} = require('../controllers/aboutController');
 const { uploadAboutImageSingle } = require('../middleware/upload');
 
 router.post('/create-about', uploadAboutImageSingle, createAbout);
