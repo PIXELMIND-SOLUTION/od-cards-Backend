@@ -1,4 +1,4 @@
-const CardCategory = require('../models/cardCategory');
+const CardCategory =  require('../models/cardCategory');
 
 exports.createCardCategory = async (req, res) => {
   try {
