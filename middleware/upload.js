@@ -19,10 +19,9 @@ const ensureDir = (dirPath) => {
   }
 };
 
-// About Us Image Upload
+// === About Us Image Upload ===
 const aboutImgPath = path.join(__dirname, '../uploads/about');
 ensureDir(aboutImgPath);
-
 const aboutStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, aboutImgPath),
   filename: (req, file, cb) => {
@@ -30,10 +29,9 @@ const aboutStorage = multer.diskStorage({
   }
 });
 
-// Card Category Image Upload
+// === Card Category Image Upload ===
 const cardCategoryImgPath = path.join(__dirname, '../uploads/cardCategories');
 ensureDir(cardCategoryImgPath);
-
 const cardCategoryStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, cardCategoryImgPath),
   filename: (req, file, cb) => {
@@ -41,7 +39,7 @@ const cardCategoryStorage = multer.diskStorage({
   }
 });
 
-// Existing storage configs
+// === Category Image Upload ===
 const categoryImgPath = path.join(__dirname, '../uploads/categoryImg');
 ensureDir(categoryImgPath);
 const categoryStorage = multer.diskStorage({
@@ -51,6 +49,7 @@ const categoryStorage = multer.diskStorage({
   }
 });
 
+// === Visiting Card Upload ===
 const visitingCardPath = path.join(__dirname, '../uploads/visitingCards');
 ensureDir(visitingCardPath);
 const visitingCardStorage = multer.diskStorage({
@@ -60,6 +59,7 @@ const visitingCardStorage = multer.diskStorage({
   }
 });
 
+// === Board Visiting Card Upload ===
 const boardCardPath = path.join(__dirname, '../uploads/boardVisitingCards');
 ensureDir(boardCardPath);
 const boardCardStorage = multer.diskStorage({
@@ -69,6 +69,7 @@ const boardCardStorage = multer.diskStorage({
   }
 });
 
+// === Review Image Upload ===
 const reviewImgPath = path.join(__dirname, '../uploads/reviews');
 ensureDir(reviewImgPath);
 const reviewStorage = multer.diskStorage({
@@ -78,10 +79,9 @@ const reviewStorage = multer.diskStorage({
   }
 });
 
-
+// === FAQ Image Upload ===
 const faqImgPath = path.join(__dirname, '../uploads/faqs');
 ensureDir(faqImgPath);
-
 const faqImageStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, faqImgPath),
   filename: (req, file, cb) => {
@@ -89,34 +89,41 @@ const faqImageStorage = multer.diskStorage({
   }
 });
 
+// === Banner Image Upload ===
+const bannerImgPath = path.join(__dirname, '../uploads/banners');
+ensureDir(bannerImgPath);
+const bannerStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, bannerImgPath),
+  filename: (req, file, cb) => {
+    cb(null, `banner_${Date.now()}_${Math.random().toString(36).substring(2, 9)}${path.extname(file.originalname)}`);
+  }
+});
 
-
-// Multer instances
+// === Multer Instances ===
 const uploadAboutImage = multer({ storage: aboutStorage, fileFilter });
 const uploadCardCategoryImage = multer({ storage: cardCategoryStorage, fileFilter });
-
-const uploadFAQImage = multer({ storage: faqImageStorage, fileFilter });
-
 const uploadCategoryImg = multer({ storage: categoryStorage, fileFilter });
 const uploadVisitingCardImg = multer({ storage: visitingCardStorage, fileFilter });
 const uploadBoardCardImg = multer({ storage: boardCardStorage, fileFilter });
 const uploadReviewImg = multer({ storage: reviewStorage, fileFilter });
+const uploadFAQImage = multer({ storage: faqImageStorage, fileFilter });
+const uploadBannerImages = multer({ storage: bannerStorage, fileFilter });
 
+// === Exported Middleware ===
 module.exports = {
   uploadCategoryImg,
+
   uploadVisitingCardImgSingle: uploadVisitingCardImg.single('image'),
   uploadVisitingCardImgMultiple: uploadVisitingCardImg.array('images', 10),
+
   uploadBoardCardImages: uploadBoardCardImg.array('images', 10),
   uploadReviewImage: uploadReviewImg.single('image'),
 
-  // Added for About Us & Cards Section
   uploadAboutImageSingle: uploadAboutImage.single('image'),
-
   uploadCardCategoryImageSingle: uploadCardCategoryImage.single('image'),
 
-  uploadCardCategoryImageSingle: uploadCardCategoryImage.single('image'),
+  uploadFAQImageSingle: uploadFAQImage.single('image'),
+  uploadFAQImageMultiple: uploadFAQImage.array('images', 10),
 
-  uploadFAQImageSingle: uploadFAQImage.single('image'), // Single image upload
-  uploadFAQImageMultiple: uploadFAQImage.array('images', 10) // Multiple image upload
-
+  uploadBannerImageMultiple: uploadBannerImages.array('images', 10) // ✅ Banner upload
 };

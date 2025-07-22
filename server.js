@@ -14,6 +14,8 @@ const reviewRoutes = require('./routes/reviewRoutes');
 const aboutRoutes  = require('./routes/AboutRoutes'); // ✅ use consistent casing
 const cardCategoryRoutes = require('./routes/cardCategoryRoutes');
 const AdminRoutes = require('./routes/AdminRoutes');
+const Contactus = require('./routes/AdminRoutes');
+const bannerRoutes = require('./routes/BannerRoutes');
 
 dotenv.config();
 connectDB();
@@ -27,6 +29,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // Static Folder for uploaded images
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use("/uploads/banners", express.static(path.join(__dirname, "uploads/banners")));
+
 
 // API Routes
 app.use('/api/users', userRoutes);
@@ -38,6 +42,8 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/aboutus', aboutRoutes);
 app.use('/api/aboutcard', cardCategoryRoutes);
 app.use('/api/admin', AdminRoutes);
+app.use('/api/contactus', Contactus);
+app.use("/api/banners", bannerRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

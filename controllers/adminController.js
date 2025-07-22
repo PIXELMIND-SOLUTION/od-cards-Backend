@@ -1,6 +1,9 @@
 const FAQ = require('../models/FAQ');  // Importing the FAQ model
 const FAQImage = require('../models/FAQImage');
 const Contact = require('../models/Contact');
+const fs = require('fs');
+const path = require('path');
+
 
 exports.createFAQ = async (req, res) => {
   try {
@@ -158,6 +161,48 @@ exports.deleteFAQ = async (req, res) => {
   }
 };
 
+// Delete FAQ Image
+exports.deleteFAQImage = async (req, res) => {
+  try {
+    const faqImageDoc = await FAQImage.findOne();
+
+    if (!faqImageDoc) {
+      return res.status(404).json({
+        success: false,
+        message: 'No FAQ image found to delete',
+      });
+    }
+
+    const imagePath = path.join(__dirname, '../public/uploads/faqs', faqImageDoc.image);
+
+    // Delete the file from filesystem
+    fs.unlink(imagePath, async (err) => {
+      if (err && err.code !== 'ENOENT') {
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to delete image file',
+          error: err.message,
+        });
+      }
+
+      // Remove the document from MongoDB
+      await FAQImage.deleteMany();
+
+      res.status(200).json({
+        success: true,
+        message: 'FAQ image deleted successfully',
+      });
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: 'Server Error',
+      error: error.message,
+    });
+  }
+};
+
 
 
 exports.submitContactForm = async (req, res) => {
@@ -181,6 +226,66 @@ exports.submitContactForm = async (req, res) => {
     });
   } catch (error) {
     console.error('Error submitting contact form:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server Error',
+      error: error.message
+    });
+  }
+};
+
+exports.getAllSubmissions = async (req, res) => {
+  try {
+    const submissions = await Contact.find().sort({ createdAt: -1 });
+
+    // Format the createdAt timestamp
+    const formattedSubmissions = submissions.map(sub => ({
+      _id: sub._id,
+      name: sub.name,
+      email: sub.email,
+      number: sub.number,
+      message: sub.message,
+      createdAt: sub.createdAt,
+      formattedDate: new Date(sub.createdAt).toLocaleDateString(),
+      formattedTime: new Date(sub.createdAt).toLocaleTimeString(),
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: 'All contact form submissions retrieved successfully.',
+      data: formattedSubmissions
+    });
+  } catch (error) {
+    console.error('Error fetching contact form submissions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server Error',
+      error: error.message
+    });
+  }
+};
+
+
+exports.deleteSubmission = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const deletedContact = await Contact.findByIdAndDelete(id);
+
+    if (!deletedContact) {
+      return res.status(404).json({
+        success: false,
+        message: 'Contact submission not found.'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Contact submission deleted successfully.',
+      data: deletedContact
+    });
+  } catch (error) {
+    console.error('Error deleting contact submission:', error);
     res.status(500).json({
       success: false,
       message: 'Server Error',
