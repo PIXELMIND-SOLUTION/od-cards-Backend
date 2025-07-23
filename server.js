@@ -16,6 +16,7 @@ const cardCategoryRoutes = require('./routes/cardCategoryRoutes');
 const AdminRoutes = require('./routes/AdminRoutes');
 const Contactus = require('./routes/AdminRoutes');
 const bannerRoutes = require('./routes/BannerRoutes');
+const marqueeRoutes = require('./routes/MarqueeRoutes');
 
 dotenv.config();
 connectDB();
@@ -44,6 +45,7 @@ app.use('/api/aboutcard', cardCategoryRoutes);
 app.use('/api/admin', AdminRoutes);
 app.use('/api/contactus', Contactus);
 app.use("/api/banners", bannerRoutes);
+app.use('/api/marquees', marqueeRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
