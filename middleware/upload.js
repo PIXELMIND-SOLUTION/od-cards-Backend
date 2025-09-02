@@ -99,6 +99,22 @@ const bannerStorage = multer.diskStorage({
   }
 });
 
+
+//uplods design for add to cart 
+
+// === New: Upload Design Path ===
+const userDesignPath = path.join(__dirname, '../uploads/userDesigns');
+ensureDir(userDesignPath);
+
+const designStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, userDesignPath),
+  filename: (req, file, cb) => {
+    cb(null, `design_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${path.extname(file.originalname)}`);
+  }
+});
+
+
+
 // === Multer Instances ===
 const uploadAboutImage = multer({ storage: aboutStorage, fileFilter });
 const uploadCardCategoryImage = multer({ storage: cardCategoryStorage, fileFilter });
@@ -108,6 +124,9 @@ const uploadBoardCardImg = multer({ storage: boardCardStorage, fileFilter });
 const uploadReviewImg = multer({ storage: reviewStorage, fileFilter });
 const uploadFAQImage = multer({ storage: faqImageStorage, fileFilter });
 const uploadBannerImages = multer({ storage: bannerStorage, fileFilter });
+const uploadDesignFile = multer({ storage: designStorage, fileFilter });
+
+
 
 // === Exported Middleware ===
 module.exports = {
@@ -125,5 +144,6 @@ module.exports = {
   uploadFAQImageSingle: uploadFAQImage.single('image'),
   uploadFAQImageMultiple: uploadFAQImage.array('images', 10),
 
-  uploadBannerImageMultiple: uploadBannerImages.array('images', 10) // ✅ Banner upload
+  uploadBannerImageMultiple: uploadBannerImages.array('images', 10), // ✅ Banner upload
+    uploadDesignFile: uploadDesignFile.single('design')
 };
