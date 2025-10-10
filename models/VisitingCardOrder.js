@@ -82,6 +82,7 @@ const visitingCardOrderSchema = new mongoose.Schema({
     type: [],
     default: []
   },
+    price: { type: Number, default: 0 },
   createdAt: {
     type: Date,
     default: Date.now
