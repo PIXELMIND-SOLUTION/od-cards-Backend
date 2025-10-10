@@ -145,5 +145,5 @@ module.exports = {
   uploadFAQImageMultiple: uploadFAQImage.array('images', 10),
 
   uploadBannerImageMultiple: uploadBannerImages.array('images', 10), // ✅ Banner upload
-    uploadDesignFile: uploadDesignFile.single('design')
+  uploadDesignFile: uploadDesignFile.single('design')
 };
