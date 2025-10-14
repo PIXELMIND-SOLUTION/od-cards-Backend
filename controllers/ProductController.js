@@ -3,33 +3,79 @@ const Product = require('../models/Product');
 const VisitingCardOrder = require("../models/VisitingCardOrder")
 const BoardVisitingCardOrder = require("../models/BoardVisitingCardOrder").default
 const path = require('path');
+
+// Helper to convert "Yes"/"No" or "true"/"false" strings to Boolean
+// helpers.js
+exports.parseBoolean = (val) => {
+  if (typeof val === "boolean") return val;
+  if (!val) return false;
+  const s = val.toString().toLowerCase();
+  return s === "yes" || s === "true";
+};
+
+exports.parseArray = (val) => {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  return [val];
+};
 // ✅ Create Product
 exports.createProduct = async (req, res) => {
   try {
-    const { name, category, subCategory, images, quantity, price, offeredPrice, description } = req.body;
+    const {
+      name, category, subCategory, description, basePrice, offeredPrice, quantity,
+      printingTypes, laminationTypes, sizes, boardTypes, paperTypes, gsmOptions,
+      boxPacking, roundCorners, bigSizeCard, creasing, padding, scoring, shapeCutting,
+      specialOptions, specialNotes, cardSize, boardThickness,
+      isBigCard, hasBoxPacking, hasRoundCorners, hasCreasing, hasPadding, hasScoring, hasShapeCutting
+    } = req.body;
 
-    if (!name || !category || !subCategory || !images || images.length === 0 || !price || !description) {
-      return res.status(400).json({ message: 'Missing required fields: name, category, subCategory, images, price, or description.' });
+    // Handle uploaded images
+    let images = [];
+    if (req.files && req.files.length > 0) {
+      images = req.files.map(file => `/uploads/visitingCards/${file.filename}`);
     }
 
-
-
-    const newProduct = new Product({
+    const product = new Product({
       name,
       category,
       subCategory,
+      description,
       images,
-      quantity,
-      price,
+      basePrice,
+      price: basePrice,
       offeredPrice,
-      description
+      quantity,
+      printingTypes: printingTypes ? JSON.parse(printingTypes) : [],
+      laminationTypes: laminationTypes ? JSON.parse(laminationTypes) : [],
+      sizes: sizes ? JSON.parse(sizes) : [],
+      boardTypes: boardTypes ? JSON.parse(boardTypes) : [],
+      paperTypes: paperTypes ? JSON.parse(paperTypes) : [],
+      gsmOptions: gsmOptions ? JSON.parse(gsmOptions) : [],
+      boxPacking: boxPacking || 0,
+      roundCorners: roundCorners || 0,
+      bigSizeCard: bigSizeCard || 0,
+      creasing: creasing || 0,
+      padding: padding || 0,
+      scoring: scoring || 0,
+      shapeCutting: shapeCutting || 0,
+      specialOptions: specialOptions ? JSON.parse(specialOptions) : [],
+      specialNotes: specialNotes || '',
+      cardSize,
+      boardThickness,
+      isBigCard: isBigCard || false,
+      hasBoxPacking: hasBoxPacking || false,
+      hasRoundCorners: hasRoundCorners || false,
+      hasCreasing: hasCreasing || false,
+      hasPadding: hasPadding || false,
+      hasScoring: hasScoring || false,
+      hasShapeCutting: hasShapeCutting || false
     });
 
-    const savedProduct = await newProduct.save();
-    res.status(201).json({ message: 'Product created successfully.', product: savedProduct });
+    await product.save();
+    return res.status(201).json({ success: true, message: 'Product created successfully', data: product });
   } catch (error) {
-    console.error('Error in createProduct:', error);
-    res.status(500).json({ message: 'Server error.' });
+    console.error(error);
+    return res.status(500).json({ success: false, message: 'Server Error', error: error.message });
   }
 };
 
@@ -37,65 +83,44 @@ exports.createProduct = async (req, res) => {
 exports.getAllProducts = async (req, res) => {
   try {
     const products = await Product.find().sort({ createdAt: -1 });
-    res.status(200).json({ message: 'Products fetched successfully.', products });
+
+    if (!products || products.length === 0)
+      return res.status(404).json({ success: false, message: 'No products found' });
+
+    res.status(200).json({
+      success: true,
+      message: 'All products fetched successfully',
+      count: products.length,
+      data: products,
+    });
   } catch (error) {
-    console.error('Error in getAllProducts:', error);
-    res.status(500).json({ message: 'Server error.' });
+    console.error('❌ Error fetching products:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 // ✅ Get Product by ID
 exports.getProductById = async (req, res) => {
   try {
-    const { productId } = req.params;
-    const product = await Product.findById(productId);
+    const { id } = req.params;
 
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found.' });
-    }
+    const product = await Product.findById(id);
+    if (!product)
+      return res.status(404).json({ success: false, message: 'Product not found' });
 
-    res.status(200).json({ message: 'Product fetched successfully.', product });
+    res.status(200).json({
+      success: true,
+      message: 'Product fetched successfully',
+      data: product,
+    });
   } catch (error) {
-    console.error('Error in getProductById:', error);
-    res.status(500).json({ message: 'Server error.' });
+    console.error('❌ Error fetching product by ID:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// ✅ Update Product
-exports.updateProduct = async (req, res) => {
-  try {
-    const { productId } = req.params;
-    const updates = req.body;
 
-    const updatedProduct = await Product.findByIdAndUpdate(productId, updates, { new: true });
 
-    if (!updatedProduct) {
-      return res.status(404).json({ message: 'Product not found.' });
-    }
-
-    res.status(200).json({ message: 'Product updated successfully.', product: updatedProduct });
-  } catch (error) {
-    console.error('Error in updateProduct:', error);
-    res.status(500).json({ message: 'Server error.' });
-  }
-};
-
-// ✅ Delete Product
-exports.deleteProduct = async (req, res) => {
-  try {
-    const { productId } = req.params;
-    const deletedProduct = await Product.findByIdAndDelete(productId);
-
-    if (!deletedProduct) {
-      return res.status(404).json({ message: 'Product not found.' });
-    }
-
-    res.status(200).json({ message: 'Product deleted successfully.', product: deletedProduct });
-  } catch (error) {
-    console.error('Error in deleteProduct:', error);
-    res.status(500).json({ message: 'Server error.' });
-  }
-};
 
 
 exports.getVisitingCardProducts = async (req, res) => {
@@ -145,61 +170,20 @@ exports.getInvitationCardProducts = async (req, res) => {
 };
 
 
+// Create Visiting Card Order
 exports.createVisitingCards = async (req, res) => {
-  try {
+ try {
     const {
       productCategory,
-      category,
       productName,
-      printingType,
-      quantity = 500,
-      laminationType,
-      boxPacking = 'No',
-      roundCorners = 'No',
-      bigSizeCard = 'No',
-      cardSizeMultiplier = 1,
-      size,
-      padding,
-      boardType,
-      boardThickness,
-      specialOptions,
-      specialNotes,
-      paperType,
-      gsm
-    } = req.body;
-
-    // ✅ Required fields validation
-    if (!productCategory || !productName) {
-      return res.status(400).json({ message: 'Product category and name are required' });
-    }
-
-    if (bigSizeCard === 'Yes' && (!cardSizeMultiplier || cardSizeMultiplier < 2 || cardSizeMultiplier > 30)) {
-      return res.status(400).json({
-        message: 'Invalid card size multiplier. It must be between 2 and 30 if bigSizeCard is Yes.'
-      });
-    }
-
-    // ✅ Handle multiple image paths
-    const imagePaths = req.files?.map(file =>
-      path.join('uploads/visitingCards', file.filename)
-    ) || [];
-
-    const cardSizeLabel = bigSizeCard === 'Yes'
-      ? `${cardSizeMultiplier} Card Size`
-      : 'Standard';
-
-    const visitingCardOrder = await VisitingCardOrder.create({
-      productCategory,
       category,
-      productName,
       printingType,
       quantity,
       laminationType,
-      boxPacking: boxPacking === 'Yes',
-      roundCorners: roundCorners === 'Yes',
-      bigSizeCard: bigSizeCard === 'Yes',
+      boxPacking,
+      roundCorners,
+      bigSizeCard,
       cardSizeMultiplier,
-      cardSize: cardSizeLabel,
       size,
       padding,
       boardType,
@@ -208,35 +192,151 @@ exports.createVisitingCards = async (req, res) => {
       specialNotes,
       paperType,
       gsm,
-      images: imagePaths
+      images,
+      price: clientPrice,
+      // ✅ added missing optional fields
+      creasing,
+      scoring,
+      shapeCutting
+    } = req.body;
+
+    // ✅ helper functions
+    const parseBoolean = (val) => {
+      if (typeof val === "boolean") return val;
+      if (!val) return false;
+      const s = val.toString().toLowerCase();
+      return s === "yes" || s === "true";
+    };
+
+    const parseArray = (val) => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val;
+      return [val];
+    };
+
+    const parseNumberArray = (val) => parseArray(val).map((v) => Number(v) || 0);
+
+    // ✅ Try fetching matching Product to calculate price
+    let product = await Product.findOne({
+      $or: [{ productName }, { category: productCategory }],
+    }).lean();
+
+    // ✅ Price calculation logic
+    const findOptPrice = (arr, name) => {
+      if (!Array.isArray(arr) || !name) return 0;
+      const n = Array.isArray(name) ? name[0] : name;
+      const match = arr.find((item) => {
+        if (!item) return false;
+        if (typeof item === "string") return item === n;
+        return item.name && item.name.toString() === n.toString();
+      });
+      return match ? Number(match.price ?? 0) : 0;
+    };
+
+    const computePrice = (productDoc) => {
+      if (!productDoc) return Number(clientPrice) || 0;
+
+      let total = Number(productDoc.basePrice ?? productDoc.price ?? 0);
+
+      total += findOptPrice(productDoc.printingTypes, printingType);
+      parseArray(laminationType).forEach((l) => (total += findOptPrice(productDoc.laminationTypes, l)));
+      parseArray(size).forEach((s) => (total += findOptPrice(productDoc.sizes, s)));
+      parseArray(boardType).forEach((b) => (total += findOptPrice(productDoc.boardTypes, b)));
+      parseArray(paperType).forEach((p) => (total += findOptPrice(productDoc.paperTypes, p)));
+      parseArray(gsm).forEach((g) => (total += findOptPrice(productDoc.gsmOptions, g)));
+
+      // ✅ add-on pricing (boolean)
+      if (parseBoolean(boxPacking)) total += Number(productDoc.boxPacking ?? 0);
+      if (parseBoolean(roundCorners)) total += Number(productDoc.roundCorners ?? 0);
+      if (parseBoolean(bigSizeCard)) total += Number(productDoc.bigSizeCard ?? 0);
+      if (parseBoolean(padding)) total += Number(productDoc.padding ?? 0);
+      if (parseBoolean(creasing)) total += Number(productDoc.creasing ?? 0);
+      if (parseBoolean(scoring)) total += Number(productDoc.scoring ?? 0);
+      if (parseBoolean(shapeCutting)) total += Number(productDoc.shapeCutting ?? 0);
+
+      // ✅ special options
+      const userSpecialOptions = parseArray(specialOptions);
+      if (Array.isArray(productDoc.specialOptions) && productDoc.specialOptions.length > 0) {
+        userSpecialOptions.forEach((opt) => {
+          const found = productDoc.specialOptions.find(
+            (so) => so && (so.name === opt || so === opt)
+          );
+          if (found) total += Number(found.price ?? 0);
+        });
+      }
+
+      return total;
+    };
+
+    const finalPrice = computePrice(product);
+
+    // ✅ Build and save new order
+    const newOrder = new VisitingCardOrder({
+      productCategory,
+      productName,
+      category,
+      printingType: Array.isArray(printingType) ? printingType[0] : printingType,
+      quantity: parseNumberArray(quantity),
+      laminationType: parseArray(laminationType),
+      boxPacking: parseBoolean(boxPacking),
+      roundCorners: parseBoolean(roundCorners),
+      bigSizeCard: parseBoolean(bigSizeCard),
+      cardSizeMultiplier: Number(cardSizeMultiplier) || 1,
+      size: parseArray(size),
+      padding: parseBoolean(padding),
+      boardType: parseArray(boardType),
+      boardThickness: Array.isArray(boardThickness)
+        ? boardThickness[0]
+        : boardThickness,
+      specialOptions: Array.isArray(specialOptions)
+        ? specialOptions[0]
+        : specialOptions,
+      specialNotes: Array.isArray(specialNotes)
+        ? specialNotes[0]
+        : specialNotes,
+      paperType: parseArray(paperType),
+      gsm: parseArray(gsm),
+      images: parseArray(images),
+      creasing: parseBoolean(creasing),
+      scoring: parseBoolean(scoring),
+      shapeCutting: parseBoolean(shapeCutting),
+      price: finalPrice,
     });
+
+    await newOrder.save();
 
     return res.status(201).json({
-      message: 'Visiting card order created successfully',
-      data: visitingCardOrder
+      success: true,
+      message: "Visiting card order created successfully",
+      data: newOrder,
     });
-
   } catch (error) {
-    console.error('Error creating visiting card order:', error);
-    return res.status(500).json({
-      message: 'Server error',
-      error: error.message
+    console.error("❌ Error creating visiting card order:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while creating visiting card order.",
+      error: error.message,
     });
   }
 };
-
-
 // ✅ GET all visiting card orders
 exports.getAllVisitingCards = async (req, res) => {
   try {
-    const orders = await VisitingCardOrder.find().sort({ createdAt: -1 }); // latest first
+    const visitingCards = await VisitingCardOrder.find().sort({ createdAt: -1 });
+
+    if (!visitingCards.length) {
+      return res.status(404).json({ success: false, message: "No visiting cards found" });
+    }
+
     res.status(200).json({
-      message: 'All visiting card orders fetched successfully',
-      data: orders
+      success: true,
+      message: "All visiting cards fetched successfully",
+      count: visitingCards.length,
+      data: visitingCards,
     });
   } catch (error) {
-    console.error('Error fetching all orders:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error("Error fetching visiting cards:", error);
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
 };
 
@@ -244,21 +344,24 @@ exports.getAllVisitingCards = async (req, res) => {
 exports.getSingleVisitingCard = async (req, res) => {
   try {
     const { id } = req.params;
-    const order = await VisitingCardOrder.findById(id);
+    const visitingCard = await VisitingCardOrder.findById(id);
 
-    if (!order) {
-      return res.status(404).json({ message: 'Visiting card order not found' });
+    if (!visitingCard) {
+      return res.status(404).json({ success: false, message: "Visiting card not found" });
     }
 
     res.status(200).json({
-      message: 'Single visiting card order fetched successfully',
-      data: order
+      success: true,
+      message: "Visiting card fetched successfully",
+      data: visitingCard,
     });
   } catch (error) {
-    console.error('Error fetching single order:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error("Error fetching visiting card by ID:", error);
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
 };
+
+
 
 
 //board visiting cards
@@ -271,10 +374,9 @@ exports.createBoardVisitingCards = async (req, res) => {
       laminationType,
       roundCorners = 'No',
       bigSizeCard = 'No',
-      cardSizeMultiplier = 1
+      cardSizeMultiplier = 1,
     } = req.body;
 
-    // Validate input
     if (!printingType || !quantity || !laminationType) {
       return res.status(400).json({ message: 'Printing type, quantity, and lamination type are required.' });
     }
@@ -285,16 +387,9 @@ exports.createBoardVisitingCards = async (req, res) => {
       });
     }
 
-    // Image upload handling
-    const imagePaths = req.files?.map(file =>
-      path.join('uploads/boardVisitingCards', file.filename)
-    ) || [];
+    const imagePaths = req.files?.map(file => path.join('uploads/boardVisitingCards', file.filename)) || [];
+    const cardSizeLabel = bigSizeCard === 'Yes' ? `${cardSizeMultiplier} Card Size` : 'Standard';
 
-    const cardSizeLabel = bigSizeCard === 'Yes'
-      ? `${cardSizeMultiplier} Card Size`
-      : 'Standard';
-
-    // Save to DB
     const boardCardOrder = await BoardVisitingCardOrder.create({
       productCategory: 'Board Visiting Cards (320 Gsm)',
       productName: 'Board Visiting Cards (320 Gsm)',
@@ -321,7 +416,6 @@ exports.createBoardVisitingCards = async (req, res) => {
     });
   }
 };
-
 
 exports.getAllBoardVisitingCards = async (req, res) => {
   try {
@@ -497,7 +591,7 @@ exports.getPocketCalenderOrders = async (req, res) => {
 exports.getBoardMixingJobsOrders = async (req, res) => {
   try {
     const productCategory = "Mixing Jobs";
-    
+
 
     const orders = await VisitingCardOrder.find({ productCategory });
 
@@ -702,16 +796,10 @@ exports.getAllCardsWithCat = async (req, res) => {
 exports.updateCard = async (req, res) => {
   try {
     const { id } = req.params;
-
-    // Handle file uploads (optional)
-    const imagePaths = req.files?.map(file =>
-      path.join('uploads/visitingCards', file.filename)
-    ) || [];
-
     const {
       productCategory,
-      category,
       productName,
+      category,
       printingType,
       quantity,
       laminationType,
@@ -726,69 +814,128 @@ exports.updateCard = async (req, res) => {
       specialOptions,
       specialNotes,
       paperType,
-      gsm
+      gsm,
+      images,
+      price: clientPrice,
+      creasing,
+      scoring,
+      shapeCutting
     } = req.body;
 
-    // Validation
-    if (!productCategory || !productName) {
-      return res.status(400).json({ message: 'Product category and name are required' });
-    }
+    const parseBoolean = (val) => {
+      if (typeof val === "boolean") return val;
+      if (!val) return false;
+      const s = val.toString().toLowerCase();
+      return s === "yes" || s === "true";
+    };
 
-    if (bigSizeCard === 'Yes' && (!cardSizeMultiplier || cardSizeMultiplier < 2 || cardSizeMultiplier > 30)) {
-      return res.status(400).json({
-        message: 'Invalid card size multiplier. It must be between 2 and 30 if bigSizeCard is Yes.'
+    const parseArray = (val) => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val;
+      return [val];
+    };
+
+    const parseNumberArray = (val) => parseArray(val).map((v) => Number(v) || 0);
+
+    let product = await Product.findOne({
+      $or: [{ productName }, { category: productCategory }],
+    }).lean();
+
+    const findOptPrice = (arr, name) => {
+      if (!Array.isArray(arr) || !name) return 0;
+      const n = Array.isArray(name) ? name[0] : name;
+      const match = arr.find((item) => {
+        if (!item) return false;
+        if (typeof item === "string") return item === n;
+        return item.name && item.name.toString() === n.toString();
       });
-    }
+      return match ? Number(match.price ?? 0) : 0;
+    };
 
-    const cardSizeLabel = bigSizeCard === 'Yes'
-      ? `${cardSizeMultiplier} Card Size`
-      : 'Standard';
+    const computePrice = (productDoc) => {
+      if (!productDoc) return Number(clientPrice) || 0;
+
+      let total = Number(productDoc.basePrice ?? productDoc.price ?? 0);
+
+      total += findOptPrice(productDoc.printingTypes, printingType);
+      parseArray(laminationType).forEach((l) => (total += findOptPrice(productDoc.laminationTypes, l)));
+      parseArray(size).forEach((s) => (total += findOptPrice(productDoc.sizes, s)));
+      parseArray(boardType).forEach((b) => (total += findOptPrice(productDoc.boardTypes, b)));
+      parseArray(paperType).forEach((p) => (total += findOptPrice(productDoc.paperTypes, p)));
+      parseArray(gsm).forEach((g) => (total += findOptPrice(productDoc.gsmOptions, g)));
+
+      if (parseBoolean(boxPacking)) total += Number(productDoc.boxPacking ?? 0);
+      if (parseBoolean(roundCorners)) total += Number(productDoc.roundCorners ?? 0);
+      if (parseBoolean(bigSizeCard)) total += Number(productDoc.bigSizeCard ?? 0);
+      if (parseBoolean(padding)) total += Number(productDoc.padding ?? 0);
+      if (parseBoolean(creasing)) total += Number(productDoc.creasing ?? 0);
+      if (parseBoolean(scoring)) total += Number(productDoc.scoring ?? 0);
+      if (parseBoolean(shapeCutting)) total += Number(productDoc.shapeCutting ?? 0);
+
+      const userSpecialOptions = parseArray(specialOptions);
+      if (Array.isArray(productDoc.specialOptions) && productDoc.specialOptions.length > 0) {
+        userSpecialOptions.forEach((opt) => {
+          const found = productDoc.specialOptions.find(
+            (so) => so && (so.name === opt || so === opt)
+          );
+          if (found) total += Number(found.price ?? 0);
+        });
+      }
+
+      return total;
+    };
+
+    const finalPrice = computePrice(product);
 
     const updatedOrder = await VisitingCardOrder.findByIdAndUpdate(
       id,
       {
         productCategory,
-        category,
         productName,
-        printingType,
-        quantity,
-        laminationType,
-        boxPacking: boxPacking === 'Yes',
-        roundCorners: roundCorners === 'Yes',
-        bigSizeCard: bigSizeCard === 'Yes',
-        cardSizeMultiplier,
-        cardSize: cardSizeLabel,
-        size,
-        padding,
-        boardType,
-        boardThickness,
-        specialOptions,
-        specialNotes,
-        paperType,
-        gsm,
-        ...(imagePaths.length > 0 && { images: imagePaths }) // Only update images if provided
+        category,
+        printingType: Array.isArray(printingType) ? printingType[0] : printingType,
+        quantity: parseNumberArray(quantity),
+        laminationType: parseArray(laminationType),
+        boxPacking: parseBoolean(boxPacking),
+        roundCorners: parseBoolean(roundCorners),
+        bigSizeCard: parseBoolean(bigSizeCard),
+        cardSizeMultiplier: Number(cardSizeMultiplier) || 1,
+        size: parseArray(size),
+        padding: parseBoolean(padding),
+        boardType: parseArray(boardType),
+        boardThickness: Array.isArray(boardThickness)
+          ? boardThickness[0]
+          : boardThickness,
+        specialOptions: Array.isArray(specialOptions)
+          ? specialOptions[0]
+          : specialOptions,
+        specialNotes: Array.isArray(specialNotes)
+          ? specialNotes[0]
+          : specialNotes,
+        paperType: parseArray(paperType),
+        gsm: parseArray(gsm),
+        images: parseArray(images),
+        creasing: parseBoolean(creasing),
+        scoring: parseBoolean(scoring),
+        shapeCutting: parseBoolean(shapeCutting),
+        price: finalPrice,
       },
-      { new: true } // Return updated document
+      { new: true }
     );
 
-    if (!updatedOrder) {
-      return res.status(404).json({ message: 'Visiting card order not found' });
-    }
+    if (!updatedOrder)
+      return res.status(404).json({ success: false, message: "Order not found" });
 
-    return res.status(200).json({
-      message: 'Visiting card order updated successfully',
-      data: updatedOrder
+    res.status(200).json({
+      success: true,
+      message: "Visiting card order updated successfully",
+      data: updatedOrder,
     });
-
   } catch (error) {
-    console.error('Error updating visiting card order:', error);
-    return res.status(500).json({
-      message: 'Server error',
-      error: error.message
-    });
+    console.error("❌ Error updating visiting card order:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
-
 
 exports.deleteCard = async (req, res) => {
   try {
@@ -814,5 +961,117 @@ exports.deleteCard = async (req, res) => {
   }
 };
 
+// ===================== Delete Visiting Card By ID =====================
+exports.deleteVisitingCardById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deletedVisitingCard = await VisitingCardOrder.findByIdAndDelete(id);
+
+    if (!deletedVisitingCard) {
+      return res.status(404).json({ success: false, message: "Visiting card not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Visiting card deleted successfully",
+      data: deletedVisitingCard,
+    });
+  } catch (error) {
+    console.error("Error deleting visiting card:", error);
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+};
+
+
+// ✅ UPDATE Product by ID (same logic as create)
+exports.updateProductById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      name, category, subCategory, description, basePrice, offeredPrice, quantity,
+      printingTypes, laminationTypes, sizes, boardTypes, paperTypes, gsmOptions,
+      boxPacking, roundCorners, bigSizeCard, creasing, padding, scoring, shapeCutting,
+      specialOptions, specialNotes, cardSize, boardThickness,
+      isBigCard, hasBoxPacking, hasRoundCorners, hasCreasing, hasPadding, hasScoring, hasShapeCutting
+    } = req.body;
+
+    // handle uploaded images
+    let images = [];
+    if (req.files && req.files.length > 0) {
+      images = req.files.map(file => `/uploads/visitingCards/${file.filename}`);
+    }
+
+    const updatedProduct = await Product.findByIdAndUpdate(
+      id,
+      {
+        name,
+        category,
+        subCategory,
+        description,
+        images: images.length > 0 ? images : undefined, // keep old if not updated
+        basePrice,
+        price: basePrice,
+        offeredPrice,
+        quantity,
+        printingTypes: printingTypes ? JSON.parse(printingTypes) : [],
+        laminationTypes: laminationTypes ? JSON.parse(laminationTypes) : [],
+        sizes: sizes ? JSON.parse(sizes) : [],
+        boardTypes: boardTypes ? JSON.parse(boardTypes) : [],
+        paperTypes: paperTypes ? JSON.parse(paperTypes) : [],
+        gsmOptions: gsmOptions ? JSON.parse(gsmOptions) : [],
+        boxPacking: boxPacking || 0,
+        roundCorners: roundCorners || 0,
+        bigSizeCard: bigSizeCard || 0,
+        creasing: creasing || 0,
+        padding: padding || 0,
+        scoring: scoring || 0,
+        shapeCutting: shapeCutting || 0,
+        specialOptions: specialOptions ? JSON.parse(specialOptions) : [],
+        specialNotes: specialNotes || '',
+        cardSize,
+        boardThickness,
+        isBigCard: isBigCard || false,
+        hasBoxPacking: hasBoxPacking || false,
+        hasRoundCorners: hasRoundCorners || false,
+        hasCreasing: hasCreasing || false,
+        hasPadding: hasPadding || false,
+        hasScoring: hasScoring || false,
+        hasShapeCutting: hasShapeCutting || false
+      },
+      { new: true }
+    );
+
+    if (!updatedProduct)
+      return res.status(404).json({ success: false, message: 'Product not found' });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Product updated successfully',
+      data: updatedProduct
+    });
+  } catch (error) {
+    console.error('❌ Error updating product:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ✅ Delete Product
+exports.deleteProduct = async (req, res) => {
+   try {
+    const { id } = req.params;
+
+    const deletedProduct = await Product.findByIdAndDelete(id);
+    if (!deletedProduct)
+      return res.status(404).json({ success: false, message: 'Product not found' });
+
+    res.status(200).json({
+      success: true,
+      message: 'Product deleted successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error deleting product:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 

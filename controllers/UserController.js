@@ -4,6 +4,7 @@ const { uploadDesignFile } = require('../middleware/upload');
 const Cart = require("../models/Cart")
 const Order = require("../models/Order")
 const Address = require("../models/Address")
+const VisitingCardOrder = require("../models/VisitingCardOrder"); // ✅ add this
 
 // ✅ Register or Login User by Mobile
 exports.registerUser = async (req, res) => {
@@ -135,61 +136,42 @@ const uploadDesignFileMiddleware = (req, res) => {
 
 exports.addToCart = async (req, res) => {
   try {
-    // 1. File upload handle karo, agar file na bhi aaye toh chalega
     await uploadDesignFileMiddleware(req, res);
 
-    // 2. Body se required data lo
-    const { userId, productId, quantity } = req.body;
+    const { userId, visitingCardId, quantity } = req.body;
 
-    // 3. Validation
-    if (!userId || !productId || !quantity) {
+    if (!userId || !visitingCardId || !quantity) {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
 
-    // 4. Product check karo
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
+    const visitingCard = await VisitingCardOrder.findById(visitingCardId);
+    if (!visitingCard) {
+      return res.status(404).json({ success: false, message: 'Visiting card not found' });
     }
 
-    // 5. Design file path set karo agar file uploaded ho
     let designPath = '';
     if (req.file) {
       designPath = `/uploads/userDesigns/${req.file.filename}`;
     }
 
-    // 6. Calculate price details
     const deliveryPrice = 50; // fixed delivery price
-    const totalPrice = (product.price * quantity) + deliveryPrice;
+    const totalPrice = (visitingCard.price || 0) * quantity + deliveryPrice;
 
-    // 7. New cart item banao
     const newCartItem = new Cart({
       userId,
-      productId,
+      visitingCardId,
       quantity,
       designFile: designPath,
-      specialInstructions: notes,
-      deliveryPrice: deliveryPrice,
-      totalPrice: totalPrice
+      deliveryPrice,
+      totalPrice
     });
 
-    // 8. Save cart item
     await newCartItem.save();
 
-    // 9. Response bhejo
     res.status(200).json({
       success: true,
-      message: 'Product added to cart successfully',
-      cartItem: {
-        id: newCartItem._id,
-        userId: newCartItem.userId,
-        productId: newCartItem.productId,
-        quantity: newCartItem.quantity,
-        designFile: newCartItem.designFile,
-        specialInstructions: newCartItem.specialInstructions,
-        deliveryPrice: newCartItem.deliveryPrice,
-        totalPrice: newCartItem.totalPrice
-      }
+      message: 'Visiting card added to cart successfully',
+      cartItem: newCartItem
     });
 
   } catch (error) {
@@ -198,88 +180,133 @@ exports.addToCart = async (req, res) => {
   }
 };
 
+// ---------------- GET ALL CART ITEMS ----------------
+exports.getAllCartItems = async (req, res) => {
+ try {
+    const carts = await Cart.find()
+      .populate('userId', 'name email mobile location') // get user details
+
+    res.status(200).json({
+      success: true,
+      carts
+    });
+  } catch (error) {
+    console.error('Error fetching all cart items:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ---------------- GET CART ITEM BY ID ----------------
+exports.getCartById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cart = await Cart.findById(id).populate('userId','name email mobile location');
+
+    if (!cart) {
+      return res.status(404).json({ success: false, message: 'Cart item not found' });
+    }
+
+    res.status(200).json({ success: true, cart });
+  } catch (error) {
+    console.error('Error fetching cart item by id:', error);
+    res.status(500).json({ success: false, message: error.message || 'Internal server error' });
+  }
+};
 
 exports.getMyCart = async (req, res) => {
   try {
     const { userId } = req.params;
-
-    if (!userId) {
-      return res.status(400).json({ success: false, message: 'User ID is required' });
+    const carts = await Cart.find({ userId }).populate('userId','name email mobile location');
+    //populate('visitingCardId');
+    if (!carts.length) {
+      return res.status(404).json({ success: false, message: 'No cart items found for this user' });
     }
 
-    // Find all cart items for the user and populate product details
-    const cartItems = await Cart.find({ userId }).populate('productId');
-
-    if (cartItems.length === 0) {
-      return res.status(404).json({ success: false, message: 'No cart items found' });
-    }
-
-    const formattedCart = cartItems.map(item => {
-      const product = item.productId;
-
-      return {
-        cartItemId: item._id,
-        quantity: item.quantity,
-        designFile: item.designFile,
-        deliveryPrice: item.deliveryPrice,
-        totalPrice: item.totalPrice,
-        createdAt: item.createdAt,
-        product: {
-          productId: product._id,
-          name: product.name,
-          description: product.description,
-          price: product.price,
-          offeredPrice: product.offeredPrice,
-          category: product.category,
-          subCategory: product.subCategory,
-          isInStock: product.isInStock,
-          quantityAvailable: product.quantity,
-          images: product.images, // assuming URLs or relative paths
-          createdAt: product.createdAt
-        }
-      };
-    });
-
-    res.status(200).json({
-      success: true,
-      cart: formattedCart
-    });
+    res.status(200).json({ success: true, carts });
   } catch (error) {
-    console.error('Error fetching cart:', error);
+    console.error('Error fetching cart items by userId:', error);
+    res.status(500).json({ success: false, message: error.message || 'Internal server error' });
+  }
+};
+// ---------------- UPDATE CART ITEM BY ID ----------------
+exports.updateCartById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { quantity } = req.body;
+
+    const cart = await Cart.findById(id).populate('visitingCardId');
+    if (!cart) {
+      return res.status(404).json({ success: false, message: 'Cart item not found' });
+    }
+
+    if (quantity) {
+      cart.quantity = quantity;
+      cart.totalPrice = (cart.visitingCardId.price || 0) * quantity + cart.deliveryPrice;
+    }
+
+    await cart.save();
+
+    res.status(200).json({ success: true, message: 'Cart item updated', cart });
+  } catch (error) {
+    console.error('Error updating cart item:', error);
+    res.status(500).json({ success: false, message: error.message || 'Internal server error' });
+  }
+};
+
+// ---------------- DELETE CART ITEM BY ID ----------------
+exports.deleteCartById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const cart = await Cart.findByIdAndDelete(id);
+    if (!cart) {
+      return res.status(404).json({ success: false, message: 'Cart item not found' });
+    }
+
+    res.status(200).json({ success: true, message: 'Cart item deleted', cart });
+  } catch (error) {
+    console.error('Error deleting cart item:', error);
     res.status(500).json({ success: false, message: error.message || 'Internal server error' });
   }
 };
 
 
 
+
 exports.createOrder = async (req, res) => {
-  try {
-    const { userId, addressId } = req.body;
+ try {
+    // Support both JSON and multipart/form-data
+    const userId = req.body.userId || req.body['userId'];
+    const addressId = req.body.addressId || req.body['addressId'];
 
     if (!userId || !addressId) {
       return res.status(400).json({ success: false, message: 'userId and addressId are required' });
     }
 
+    // Find address
     const address = await Address.findById(addressId);
     if (!address) {
       return res.status(404).json({ success: false, message: 'Address not found' });
     }
 
-    const cartItems = await Cart.find({ userId }).populate('productId');
+    // Fetch cart items
+    const cartItems = await Cart.find({ userId }).populate('visitingCardId'); 
     if (!cartItems.length) {
       return res.status(400).json({ success: false, message: 'No items in cart' });
     }
 
     let orderTotal = 0;
     const items = cartItems.map(item => {
-      orderTotal += item.totalPrice;
+      const price = item.visitingCardId?.price || 0; // price from visiting card
+      const totalPrice = price * item.quantity + item.deliveryPrice;
+      orderTotal += totalPrice;
 
       return {
-        productId: item.productId._id,
+        visitingCardId: item.visitingCardId._id,
         quantity: item.quantity,
         designFile: item.designFile,
         deliveryPrice: item.deliveryPrice,
-        totalPrice: item.totalPrice
+        totalPrice
       };
     });
 
@@ -288,18 +315,22 @@ exports.createOrder = async (req, res) => {
     const deliveryDate = new Date();
     deliveryDate.setDate(deliveryDate.getDate() + deliveryDays);
 
+    // Generate unique orderId
+    const orderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
     const newOrder = new Order({
       userId,
       addressId,
       items,
       orderTotal,
       deliveredIn: '3-5 days',
-      deliveryDate
+      deliveryDate,
+      orderId // ✅ set unique orderId here
     });
 
     await newOrder.save();
 
-    // Optionally: Clear user's cart
+    // Clear user's cart
     await Cart.deleteMany({ userId });
 
     res.status(201).json({
@@ -307,6 +338,7 @@ exports.createOrder = async (req, res) => {
       message: 'Order placed successfully',
       order: {
         id: newOrder._id,
+        orderId: newOrder.orderId,
         userId: newOrder.userId,
         orderTotal: newOrder.orderTotal,
         status: newOrder.status,
@@ -335,21 +367,42 @@ exports.createOrder = async (req, res) => {
   }
 };
 
+// ---------------- GET ALL ORDERS ----------------
+exports.getAllOrders = async (req, res) => {
+  try {
+    const orders = await Order.find().populate("addressId").sort({ createdAt: -1 });
+    if (!orders.length) return res.status(404).json({ success: false, message: "No orders found" });
+    res.status(200).json({ success: true, orders });
+  } catch (error) {
+    console.error("Error fetching all orders:", error);
+    res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
+  }
+};
+
+// ---------------- GET ORDER BY ID ----------------
+exports.getOrderById = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const order = await Order.findById(orderId).populate("addressId");
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+    res.status(200).json({ success: true, order });
+  } catch (error) {
+    console.error("Error fetching order by ID:", error);
+    res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
+  }
+};
 
 exports.getMyOrders = async (req, res) => {
-  try {
+     try {
     const { userId } = req.params;
-    const { status } = req.query; // optional query param
+    const { status } = req.query; // 👈 get status from query
 
     if (!userId) {
       return res.status(400).json({ success: false, message: 'User ID is required' });
     }
 
-    // Build query dynamically
     const query = { userId };
-    if (status) {
-      query.status = status; // Add status filter if provided
-    }
+    if (status) query.status = status; // filter by status if provided
 
     const orders = await Order.find(query)
       .populate('addressId')
@@ -359,70 +412,12 @@ exports.getMyOrders = async (req, res) => {
       return res.status(404).json({ success: false, message: 'No orders found' });
     }
 
-    const formattedOrders = [];
-
-    for (const order of orders) {
-      const formattedItems = [];
-
-      for (const item of order.items) {
-        const product = await Product.findById(item.productId);
-        if (!product) continue;
-
-        formattedItems.push({
-          product: {
-            id: product._id,
-            name: product.name,
-            description: product.description,
-            price: product.price,
-            offeredPrice: product.offeredPrice,
-            category: product.category,
-            subCategory: product.subCategory,
-            isInStock: product.isInStock,
-            quantityAvailable: product.quantity,
-            images: product.images,
-            createdAt: product.createdAt
-          },
-          quantity: item.quantity,
-          designFile: item.designFile,
-          deliveryPrice: item.deliveryPrice,
-          totalPrice: item.totalPrice
-        });
-      }
-
-      formattedOrders.push({
-        orderId: order._id,
-        orderTotal: order.orderTotal,
-        status: order.status,
-        deliveredIn: order.deliveredIn,
-        deliveryDate: order.deliveryDate,
-        createdAt: order.createdAt,
-        address: {
-          name: order.addressId.name,
-          email: order.addressId.email,
-          mobileNumber: order.addressId.mobileNumber,
-          addressline1: order.addressId.addressline1,
-          addressline2: order.addressId.addressline2,
-          city: order.addressId.city,
-          state: order.addressId.state,
-          pincode: order.addressId.pincode,
-          country: order.addressId.country,
-          type: order.addressId.type
-        },
-        items: formattedItems
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      orders: formattedOrders
-    });
-
+    res.status(200).json({ success: true, orders });
   } catch (error) {
     console.error('Error fetching orders:', error);
-    res.status(500).json({ success: false, message: error.message || 'Internal Server Error' });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
-
 
 
 exports.getSingleOrder = async (req, res) => {
@@ -493,5 +488,34 @@ exports.getSingleOrder = async (req, res) => {
   } catch (error) {
     console.error('Error fetching single order:', error);
     res.status(500).json({ success: false, message: error.message || 'Internal Server Error' });
+  }
+};
+
+// ---------------- UPDATE ORDER BY ID ----------------
+exports.updateOrderById = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const updates = req.body; // e.g., { status: "Shipped" }
+
+    const order = await Order.findByIdAndUpdate(orderId, updates, { new: true });
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+
+    res.status(200).json({ success: true, message: "Order updated", order });
+  } catch (error) {
+    console.error("Error updating order:", error);
+    res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
+  }
+};
+
+// ---------------- DELETE ORDER BY ID ----------------
+exports.deleteOrderById = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const order = await Order.findByIdAndDelete(orderId);
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+    res.status(200).json({ success: true, message: "Order deleted", order });
+  } catch (error) {
+    console.error("Error deleting order:", error);
+    res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
   }
 };

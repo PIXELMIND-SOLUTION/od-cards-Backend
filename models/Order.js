@@ -11,9 +11,9 @@ const orderSchema = new mongoose.Schema({
   },
   items: [
     {
-      productId: {
+      visitingCardId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Product'
+        ref: 'VisitingCardOrder' // ✅ updated
       },
       quantity: Number,
       designFile: String,
@@ -32,7 +32,7 @@ const orderSchema = new mongoose.Schema({
     type: String,
     default: '3-5 days'
   },
-  orderId: { type: String, unique: true,},
+  orderId: { type: String, unique: true },
   deliveryDate: {
     type: Date
   }

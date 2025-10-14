@@ -5,9 +5,9 @@ const cartSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   },
-  productId: {
+  visitingCardId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Product',
+    ref: 'VisitingCardOrder', // ✅ reference updated
   },
   quantity: {
     type: Number,
@@ -15,10 +15,10 @@ const cartSchema = new mongoose.Schema({
     default: 1
   },
   designFile: {
-    type: String, // Uploaded design file ka path (optional)
+    type: String,
     default: null
   },
-    deliveryPrice: { type: Number, default: 0 },
+  deliveryPrice: { type: Number, default: 0 },
   totalPrice: { type: Number, default: 0 },
 }, { timestamps: true });
 
