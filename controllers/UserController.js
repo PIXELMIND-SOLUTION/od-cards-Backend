@@ -6,6 +6,17 @@ const Order = require("../models/Order")
 const Address = require("../models/Address")
 const VisitingCardOrder = require("../models/VisitingCardOrder"); // ✅ add this
 
+// ✅ Add this helper function
+const parseBoolean = (value) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const lowerValue = value.toLowerCase().trim();
+    return lowerValue === 'true' || lowerValue === 'yes' || lowerValue === '1';
+  }
+  if (typeof value === 'number') return value === 1;
+  return false;
+};
+
 // ✅ Register or Login User by Mobile
 exports.registerUser = async (req, res) => {
   try {
@@ -134,170 +145,523 @@ const uploadDesignFileMiddleware = (req, res) => {
   });
 };
 
+// ✅ CREATE: Add to Cart (FIXED PRICE CALCULATION)
 exports.addToCart = async (req, res) => {
   try {
     await uploadDesignFileMiddleware(req, res);
 
-    const { userId, visitingCardId, quantity } = req.body;
+    const { 
+      userId, 
+      visitingCardId, 
+      quantity = 1,
+      boxPacking,
+      roundCorners,
+      bigSizeCard,
+      cardSizeMultiplier,
+    } = req.body;
 
-    if (!userId || !visitingCardId || !quantity) {
-      return res.status(400).json({ success: false, message: 'Missing required fields' });
+    console.log("🛒 Adding to Cart:", {
+      userId,
+      visitingCardId,
+      quantity
+    });
+
+    if (!userId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'userId is required' 
+      });
     }
 
+    if (!visitingCardId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'visitingCardId is required' 
+      });
+    }
+
+    // Check if user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
+    }
+
+    // Get the visiting card order
     const visitingCard = await VisitingCardOrder.findById(visitingCardId);
     if (!visitingCard) {
-      return res.status(404).json({ success: false, message: 'Visiting card not found' });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Visiting card order not found' 
+      });
     }
 
+    // Handle design file upload
     let designPath = '';
     if (req.file) {
       designPath = `/uploads/userDesigns/${req.file.filename}`;
     }
 
-    const deliveryPrice = 50; // fixed delivery price
-    const totalPrice = (visitingCard.price || 0) * quantity + deliveryPrice;
+    // Calculate price based on quantity
+    const itemPrice = visitingCard.price * quantity;
+    const deliveryPrice = visitingCard.deliveryPrice || 50;
+    const totalPrice = itemPrice + deliveryPrice;
 
+    // Create cart item
     const newCartItem = new Cart({
       userId,
-      visitingCardId,
-      quantity,
-      designFile: designPath,
+      visitingCardOrder: visitingCardId,
+      orderDetails: {
+        productCategory: visitingCard.productCategory,
+        productName: visitingCard.productName,
+        printingType: visitingCard.printingType,
+        quantity: visitingCard.quantity,
+        price: visitingCard.price,
+        images: visitingCard.images || []
+      },
+      designFile: designPath || visitingCard.designFile || '',
+      itemPrice,
       deliveryPrice,
-      totalPrice
+      totalPrice,
+      quantity: parseInt(quantity) || 1
     });
 
     await newCartItem.save();
 
+    // Get user details
+    const userDetails = await User.findById(userId).select('name email mobile location');
+
+    // Prepare response with only required fields
+    const responseData = {
+      _id: newCartItem._id,
+      userId: {
+        _id: userDetails?._id,
+        name: userDetails?.name,
+        email: userDetails?.email,
+        mobile: userDetails?.mobile,
+        location: userDetails?.location
+      },
+      productId: visitingCard._id,
+      productName: visitingCard.productName,
+      productPrice: visitingCard.price,
+      quantity: newCartItem.quantity,
+      itemPrice: newCartItem.itemPrice,
+      deliveryPrice: newCartItem.deliveryPrice,
+      totalPrice: newCartItem.totalPrice,
+      designFile: newCartItem.designFile,
+      createdAt: newCartItem.createdAt
+    };
+
     res.status(200).json({
       success: true,
       message: 'Visiting card added to cart successfully',
-      cartItem: newCartItem
+      data: responseData
     });
 
   } catch (error) {
-    console.error('Error adding to cart:', error);
-    res.status(500).json({ success: false, message: error.message || 'Internal server error' });
+    console.error('❌ Error adding to cart:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal server error'
+    });
   }
 };
 
-// ---------------- GET ALL CART ITEMS ----------------
+// ---------------- GET ALL CART ITEMS (Modified) ----------------
 exports.getAllCartItems = async (req, res) => {
- try {
+  try {
     const carts = await Cart.find()
-      .populate('userId', 'name email mobile location') // get user details
+      .populate({
+        path: 'userId',
+        select: 'name email mobile location'
+      })
+      .populate({
+        path: 'visitingCardOrder',
+        select: 'productName price images'
+      })
+      .sort({ createdAt: -1 });
+
+    // Format response with only required fields
+    const formattedCarts = carts.map(cart => ({
+      _id: cart._id,
+      userId: cart.userId ? {
+        _id: cart.userId._id,
+        name: cart.userId.name,
+        email: cart.userId.email,
+        mobile: cart.userId.mobile,
+        location: cart.userId.location
+      } : null,
+      productId: cart.visitingCardOrder?._id,
+      productName: cart.visitingCardOrder?.productName,
+      productPrice: cart.visitingCardOrder?.price,
+      quantity: cart.quantity,
+      itemPrice: cart.itemPrice,
+      deliveryPrice: cart.deliveryPrice,
+      totalPrice: cart.totalPrice,
+      designFile: cart.designFile || '',
+      images: cart.orderDetails?.images || [],
+      createdAt: cart.createdAt
+    }));
 
     res.status(200).json({
       success: true,
-      carts
+      message: 'All cart items fetched successfully',
+      count: formattedCarts.length,
+      data: formattedCarts
     });
   } catch (error) {
     console.error('Error fetching all cart items:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal server error' 
+    });
   }
 };
 
-// ---------------- GET CART ITEM BY ID ----------------
+// ---------------- GET ALL CART ITEMS (Modified) ----------------
+exports.getAllCartItems = async (req, res) => {
+  try {
+    const carts = await Cart.find()
+      .populate({
+        path: 'userId',
+        select: 'name email mobile location'
+      })
+      .populate({
+        path: 'visitingCardOrder',
+        select: 'productName price images'
+      })
+      .sort({ createdAt: -1 });
+
+    // Format response with only required fields
+    const formattedCarts = carts.map(cart => ({
+      _id: cart._id,
+      userId: cart.userId ? {
+        _id: cart.userId._id,
+        name: cart.userId.name,
+        email: cart.userId.email,
+        mobile: cart.userId.mobile,
+        location: cart.userId.location
+      } : null,
+      productId: cart.visitingCardOrder?._id,
+      productName: cart.visitingCardOrder?.productName,
+      productPrice: cart.visitingCardOrder?.price,
+      quantity: cart.quantity,
+      itemPrice: cart.itemPrice,
+      deliveryPrice: cart.deliveryPrice,
+      totalPrice: cart.totalPrice,
+      designFile: cart.designFile || '',
+      images: cart.orderDetails?.images || [],
+      createdAt: cart.createdAt
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: 'All cart items fetched successfully',
+      count: formattedCarts.length,
+      data: formattedCarts
+    });
+  } catch (error) {
+    console.error('Error fetching all cart items:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal server error' 
+    });
+  }
+};
+
+// ---------------- GET CART ITEM BY ID (Modified) ----------------
 exports.getCartById = async (req, res) => {
   try {
     const { id } = req.params;
-    const cart = await Cart.findById(id).populate('userId','name email mobile location');
+    
+    const cart = await Cart.findById(id)
+      .populate({
+        path: 'userId',
+        select: 'name email mobile location'
+      })
+      .populate({
+        path: 'visitingCardOrder',
+        select: 'productName price images productCategory printingType'
+      });
 
     if (!cart) {
-      return res.status(404).json({ success: false, message: 'Cart item not found' });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Cart item not found' 
+      });
     }
 
-    res.status(200).json({ success: true, cart });
+    // Format response with only required fields
+    const formattedCart = {
+      _id: cart._id,
+      userId: cart.userId ? {
+        _id: cart.userId._id,
+        name: cart.userId.name,
+        email: cart.userId.email,
+        mobile: cart.userId.mobile,
+        location: cart.userId.location
+      } : null,
+      productId: cart.visitingCardOrder?._id,
+      productName: cart.visitingCardOrder?.productName,
+      productPrice: cart.visitingCardOrder?.price,
+      productCategory: cart.visitingCardOrder?.productCategory,
+      printingType: cart.visitingCardOrder?.printingType,
+      quantity: cart.quantity,
+      itemPrice: cart.itemPrice,
+      deliveryPrice: cart.deliveryPrice,
+      totalPrice: cart.totalPrice,
+      designFile: cart.designFile || '',
+      images: cart.orderDetails?.images || [],
+      createdAt: cart.createdAt,
+      orderDetails: {
+        productCategory: cart.orderDetails?.productCategory,
+        printingType: cart.orderDetails?.printingType,
+        quantity: cart.orderDetails?.quantity
+      }
+    };
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'Cart item fetched successfully',
+      data: formattedCart 
+    });
   } catch (error) {
     console.error('Error fetching cart item by id:', error);
-    res.status(500).json({ success: false, message: error.message || 'Internal server error' });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal server error' 
+    });
   }
 };
 
+// ---------------- GET MY CART (Modified) ----------------
 exports.getMyCart = async (req, res) => {
   try {
     const { userId } = req.params;
-    const carts = await Cart.find({ userId }).populate('userId','name email mobile location');
-    //populate('visitingCardId');
+
+    const carts = await Cart.find({ userId })
+      .populate({
+        path: 'userId',
+        select: 'name email mobile location'
+      })
+      .populate({
+        path: 'visitingCardOrder',
+        select: 'productName price images productCategory printingType laminationType'
+      })
+      .sort({ createdAt: -1 });
+
     if (!carts.length) {
-      return res.status(404).json({ success: false, message: 'No cart items found for this user' });
+      return res.status(200).json({ 
+        success: true, 
+        message: 'Cart is empty', 
+        data: [] 
+      });
     }
 
-    res.status(200).json({ success: true, carts });
+    // Format each cart item
+    const formattedCarts = carts.map(cart => ({
+      _id: cart._id,
+      userId: cart.userId ? {
+        _id: cart.userId._id,
+        name: cart.userId.name,
+        email: cart.userId.email,
+        mobile: cart.userId.mobile,
+        location: cart.userId.location
+      } : null,
+      productId: cart.visitingCardOrder?._id,
+      productName: cart.visitingCardOrder?.productName,
+      productPrice: cart.visitingCardOrder?.price,
+      productCategory: cart.visitingCardOrder?.productCategory,
+      quantity: cart.quantity,
+      itemPrice: cart.itemPrice,
+      deliveryPrice: cart.deliveryPrice,
+      totalPrice: cart.totalPrice,
+      designFile: cart.designFile || '',
+      images: cart.orderDetails?.images || cart.visitingCardOrder?.images || [],
+      createdAt: cart.createdAt,
+      orderDetails: {
+        productCategory: cart.orderDetails?.productCategory,
+        printingType: cart.orderDetails?.printingType,
+        laminationType: cart.orderDetails?.laminationType,
+        quantity: cart.orderDetails?.quantity
+      }
+    }));
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'Cart items fetched successfully',
+      count: formattedCarts.length,
+      data: formattedCarts 
+    });
   } catch (error) {
     console.error('Error fetching cart items by userId:', error);
-    res.status(500).json({ success: false, message: error.message || 'Internal server error' });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal server error' 
+    });
   }
 };
-// ---------------- UPDATE CART ITEM BY ID ----------------
+
+// ---------------- UPDATE CART ITEM BY ID (Modified) ----------------
 exports.updateCartById = async (req, res) => {
   try {
     const { id } = req.params;
     const { quantity } = req.body;
 
-    const cart = await Cart.findById(id).populate('visitingCardId');
-    if (!cart) {
-      return res.status(404).json({ success: false, message: 'Cart item not found' });
+    if (!quantity || quantity < 1) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Valid quantity is required (minimum 1)' 
+      });
     }
 
-    if (quantity) {
-      cart.quantity = quantity;
-      cart.totalPrice = (cart.visitingCardId.price || 0) * quantity + cart.deliveryPrice;
+    const cart = await Cart.findById(id)
+      .populate('visitingCardOrder')
+      .populate({
+        path: 'userId',
+        select: 'name email mobile location'
+      });
+
+    if (!cart) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Cart item not found' 
+      });
     }
+
+    // Calculate new prices based on updated quantity
+    const newItemPrice = cart.visitingCardOrder?.price * quantity;
+    const newTotalPrice = newItemPrice + cart.deliveryPrice;
+
+    // Update cart
+    cart.quantity = quantity;
+    cart.itemPrice = newItemPrice;
+    cart.totalPrice = newTotalPrice;
 
     await cart.save();
 
-    res.status(200).json({ success: true, message: 'Cart item updated', cart });
+    // Prepare response
+    const responseData = {
+      _id: cart._id,
+      userId: cart.userId ? {
+        _id: cart.userId._id,
+        name: cart.userId.name,
+        email: cart.userId.email,
+        mobile: cart.userId.mobile,
+        location: cart.userId.location
+      } : null,
+      productId: cart.visitingCardOrder?._id,
+      productName: cart.visitingCardOrder?.productName,
+      productPrice: cart.visitingCardOrder?.price,
+      quantity: cart.quantity,
+      itemPrice: cart.itemPrice,
+      deliveryPrice: cart.deliveryPrice,
+      totalPrice: cart.totalPrice,
+      designFile: cart.designFile || '',
+      updatedAt: new Date()
+    };
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'Cart item updated successfully',
+      data: responseData 
+    });
   } catch (error) {
     console.error('Error updating cart item:', error);
-    res.status(500).json({ success: false, message: error.message || 'Internal server error' });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal server error' 
+    });
   }
 };
 
-// ---------------- DELETE CART ITEM BY ID ----------------
+// ---------------- DELETE CART ITEM BY ID (Modified) ----------------
 exports.deleteCartById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const cart = await Cart.findByIdAndDelete(id);
+    const cart = await Cart.findByIdAndDelete(id)
+      .populate('visitingCardOrder')
+      .populate({
+        path: 'userId',
+        select: 'name email mobile location'
+      });
+
     if (!cart) {
-      return res.status(404).json({ success: false, message: 'Cart item not found' });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Cart item not found' 
+      });
     }
 
-    res.status(200).json({ success: true, message: 'Cart item deleted', cart });
+    // Prepare response data
+    const deletedData = {
+      _id: cart._id,
+      userId: cart.userId ? {
+        _id: cart.userId._id,
+        name: cart.userId.name,
+        email: cart.userId.email,
+        mobile: cart.userId.mobile,
+        location: cart.userId.location
+      } : null,
+      productId: cart.visitingCardOrder?._id,
+      productName: cart.visitingCardOrder?.productName,
+      productPrice: cart.visitingCardOrder?.price,
+      quantity: cart.quantity,
+      itemPrice: cart.itemPrice,
+      deliveryPrice: cart.deliveryPrice,
+      totalPrice: cart.totalPrice,
+      deletedAt: new Date()
+    };
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'Cart item deleted successfully',
+      data: deletedData 
+    });
   } catch (error) {
     console.error('Error deleting cart item:', error);
-    res.status(500).json({ success: false, message: error.message || 'Internal server error' });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal server error' 
+    });
   }
 };
 
 
 
-
 exports.createOrder = async (req, res) => {
- try {
-    // Support both JSON and multipart/form-data
-    const userId = req.body.userId || req.body['userId'];
-    const addressId = req.body.addressId || req.body['addressId'];
+  try {
+    const mongoose = require("mongoose");
+    const body = req.body || {};
+
+    // ✅ Convert userId to ObjectId because Cart schema uses ObjectId
+    const userId = new mongoose.Types.ObjectId(body.userId || body["userId"]);
+    const addressId = body.addressId || body["addressId"];
 
     if (!userId || !addressId) {
-      return res.status(400).json({ success: false, message: 'userId and addressId are required' });
+      return res.status(400).json({ success: false, message: "userId and addressId are required" });
     }
 
-    // Find address
     const address = await Address.findById(addressId);
     if (!address) {
-      return res.status(404).json({ success: false, message: 'Address not found' });
+      return res.status(404).json({ success: false, message: "Address not found" });
     }
 
-    // Fetch cart items
-    const cartItems = await Cart.find({ userId }).populate('visitingCardId'); 
+    // ✅ FIXED — use ObjectId userId to fetch cart
+    const cartItems = await Cart.find({ userId })
+      .populate("visitingCardId", "productName price");
+
     if (!cartItems.length) {
-      return res.status(400).json({ success: false, message: 'No items in cart' });
+      return res.status(400).json({ success: false, message: "No items in cart" });
     }
 
     let orderTotal = 0;
+
     const items = cartItems.map(item => {
-      const price = item.visitingCardId?.price || 0; // price from visiting card
+      const price = item.visitingCardId?.price || 0;
       const totalPrice = price * item.quantity + item.deliveryPrice;
       orderTotal += totalPrice;
 
@@ -310,12 +674,9 @@ exports.createOrder = async (req, res) => {
       };
     });
 
-    // Calculate delivery date (e.g., +5 days)
-    const deliveryDays = 5;
     const deliveryDate = new Date();
-    deliveryDate.setDate(deliveryDate.getDate() + deliveryDays);
+    deliveryDate.setDate(deliveryDate.getDate() + 5);
 
-    // Generate unique orderId
     const orderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
     const newOrder = new Order({
@@ -323,49 +684,29 @@ exports.createOrder = async (req, res) => {
       addressId,
       items,
       orderTotal,
-      deliveredIn: '3-5 days',
+      deliveredIn: "3-5 days",
       deliveryDate,
-      orderId // ✅ set unique orderId here
+      orderId,
     });
 
     await newOrder.save();
 
-    // Clear user's cart
+    // delete cart items
     await Cart.deleteMany({ userId });
 
     res.status(201).json({
       success: true,
-      message: 'Order placed successfully',
-      order: {
-        id: newOrder._id,
-        orderId: newOrder.orderId,
-        userId: newOrder.userId,
-        orderTotal: newOrder.orderTotal,
-        status: newOrder.status,
-        deliveredIn: newOrder.deliveredIn,
-        deliveryDate: newOrder.deliveryDate,
-        createdAt: newOrder.createdAt,
-        items,
-        address: {
-          name: address.name,
-          email: address.email,
-          mobileNumber: address.mobileNumber,
-          addressline1: address.addressline1,
-          addressline2: address.addressline2,
-          city: address.city,
-          state: address.state,
-          pincode: address.pincode,
-          country: address.country,
-          type: address.type
-        }
-      }
+      message: "Order placed successfully",
+      order: newOrder
     });
 
   } catch (error) {
-    console.error('Order creation error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Internal Server Error' });
+    console.error("Order creation error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
 
 // ---------------- GET ALL ORDERS ----------------
 exports.getAllOrders = async (req, res) => {

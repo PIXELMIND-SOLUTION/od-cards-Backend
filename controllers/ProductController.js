@@ -19,6 +19,100 @@ exports.parseArray = (val) => {
   return [val];
 };
 // ✅ Create Product
+// controllers/productController.js
+
+// ✅ CREATE: Create new product
+exports.createProduct = async (req, res) => {
+  try {
+    const {
+      name, 
+      category,
+      productCategory,
+      productName,
+      subCategory, 
+      description, 
+      basePrice, 
+      offeredPrice,
+      minimumQuantity,
+      maximumQuantity,
+      printingTypes,
+      laminationTypes,
+      boardTypes,
+      paperTypes,
+      gsmOptions,
+      sizes,
+      demmySizes,
+      boardThicknesses,
+      specialOptions,
+      availableMultipliers,
+      boxPackingPrice,
+      roundCornersPrice,
+      bigSizeCardPrice,
+      paddingPrice,
+      creasingPrice,
+      scoringPrice,
+      shapeCuttingPrice,
+      dieCutPrice,
+      isActive,
+      isInStock
+    } = req.body;
+
+    // Handle images
+    let images = [];
+    if (req.files && req.files.length > 0) {
+      images = req.files.map(file => `/uploads/products/${file.filename}`);
+    }
+
+    const product = new Product({
+      name,
+      category,
+      productCategory,
+      productName,
+      subCategory,
+      description,
+      images,
+      basePrice: safeNumber(basePrice),
+      offeredPrice: safeNumber(offeredPrice),
+      minimumQuantity: safeNumber(minimumQuantity) || 1,
+      maximumQuantity: safeNumber(maximumQuantity) || 20000,
+      printingTypes: parseOptions(printingTypes),
+      laminationTypes: parseOptions(laminationTypes),
+      boardTypes: parseOptions(boardTypes),
+      paperTypes: parseOptions(paperTypes),
+      gsmOptions: parseOptions(gsmOptions),
+      sizes: parseOptions(sizes),
+      demmySizes: parseOptions(demmySizes),
+      boardThicknesses: safeArray(boardThicknesses),
+      specialOptions: parseOptions(specialOptions),
+      availableMultipliers: parseOptions(availableMultipliers),
+      features: {
+        boxPacking: safeNumber(boxPackingPrice),
+        roundCorners: safeNumber(roundCornersPrice),
+        bigSizeCard: safeNumber(bigSizeCardPrice),
+        padding: safeNumber(paddingPrice),
+        creasing: safeNumber(creasingPrice),
+        scoring: safeNumber(scoringPrice),
+        shapeCutting: safeNumber(shapeCuttingPrice),
+        dieCut: safeNumber(dieCutPrice)
+      },
+      isActive: isActive !== undefined ? parseBoolean(isActive) : true,
+      isInStock: isInStock !== undefined ? parseBoolean(isInStock) : true
+    });
+
+    await product.save();
+
+    res.status(201).json({
+      success: true,
+      message: "Product created successfully",
+      data: product
+    });
+  } catch (error) {
+    console.error("❌ CREATE PRODUCT ERROR:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ✅ Create Product
 exports.createProduct = async (req, res) => {
   try {
     const {
@@ -122,7 +216,6 @@ exports.getProductById = async (req, res) => {
 
 
 
-
 exports.getVisitingCardProducts = async (req, res) => {
   try {
     const products = await Product.find({ category: "Visiting Cards" }).sort({ createdAt: -1 });
@@ -170,13 +263,15 @@ exports.getInvitationCardProducts = async (req, res) => {
 };
 
 
-// Create Visiting Card Order
+// controllers/visitingCardController.js
+
+// ✅ CREATE: Create a new visiting card order
+// ✅ CREATE: Create a new visiting card order (FIXED VERSION)
 exports.createVisitingCards = async (req, res) => {
- try {
+   try {
     const {
       productCategory,
       productName,
-      category,
       printingType,
       quantity,
       laminationType,
@@ -186,168 +281,328 @@ exports.createVisitingCards = async (req, res) => {
       cardSizeMultiplier,
       size,
       padding,
-      boardType,
-      boardThickness,
-      specialOptions,
-      specialNotes,
-      paperType,
-      gsm,
-      images,
-      price: clientPrice,
-      // ✅ added missing optional fields
       creasing,
       scoring,
-      shapeCutting
+      shapeCutting,
+      dieCut,
+      boardType,
+      boardThickness,
+      paperType,
+      gsm,
+      demmySize,
+      specialOptions,
+      specialNotes,
+      images,
+      price
     } = req.body;
 
-    // ✅ helper functions
+    console.log("📝 Received Data for Visiting Card:");
+    console.log("  - Product Category:", productCategory);
+    console.log("  - Product Name:", productName);
+    console.log("  - Board Thickness:", boardThickness);
+    console.log("  - Size:", size);
+    console.log("  - Board Type:", boardType);
+    console.log("  - Paper Type:", paperType);
+    console.log("  - GSM:", gsm);
+
+    // Helper functions
     const parseBoolean = (val) => {
       if (typeof val === "boolean") return val;
-      if (!val) return false;
-      const s = val.toString().toLowerCase();
-      return s === "yes" || s === "true";
+      if (!val || val === "false" || val === "0" || val === "No") return false;
+      if (typeof val === "string") {
+        const s = val.toLowerCase().trim();
+        return s === "yes" || s === "true" || s === "1" || s === "true";
+      }
+      return false;
+    };
+
+    const parseString = (val) => {
+      if (!val) return '';
+      if (Array.isArray(val)) {
+        // Return first element if it's an array
+        return val[0]?.toString().replace(/["']/g, '').trim() || '';
+      }
+      return val.toString().replace(/["']/g, '').trim();
     };
 
     const parseArray = (val) => {
       if (!val) return [];
       if (Array.isArray(val)) return val;
+      
+      if (typeof val === 'string') {
+        // Handle JSON arrays
+        if (val.trim().startsWith('[') && val.trim().endsWith(']')) {
+          try {
+            const parsed = JSON.parse(val);
+            return Array.isArray(parsed) ? parsed : [parsed];
+          } catch (e) {
+            console.log("❌ JSON parse failed for:", val);
+          }
+        }
+        
+        // Handle comma-separated strings like "Gloss, Matt"
+        let cleanVal = val.replace(/[\[\]"]/g, '');
+        const items = cleanVal.split(',').map(item => item.trim()).filter(item => item);
+        return items;
+      }
+      
       return [val];
     };
 
-    const parseNumberArray = (val) => parseArray(val).map((v) => Number(v) || 0);
-
-    // ✅ Try fetching matching Product to calculate price
-    let product = await Product.findOne({
-      $or: [{ productName }, { category: productCategory }],
-    }).lean();
-
-    // ✅ Price calculation logic
-    const findOptPrice = (arr, name) => {
-      if (!Array.isArray(arr) || !name) return 0;
-      const n = Array.isArray(name) ? name[0] : name;
-      const match = arr.find((item) => {
-        if (!item) return false;
-        if (typeof item === "string") return item === n;
-        return item.name && item.name.toString() === n.toString();
-      });
-      return match ? Number(match.price ?? 0) : 0;
-    };
-
-    const computePrice = (productDoc) => {
-      if (!productDoc) return Number(clientPrice) || 0;
-
-      let total = Number(productDoc.basePrice ?? productDoc.price ?? 0);
-
-      total += findOptPrice(productDoc.printingTypes, printingType);
-      parseArray(laminationType).forEach((l) => (total += findOptPrice(productDoc.laminationTypes, l)));
-      parseArray(size).forEach((s) => (total += findOptPrice(productDoc.sizes, s)));
-      parseArray(boardType).forEach((b) => (total += findOptPrice(productDoc.boardTypes, b)));
-      parseArray(paperType).forEach((p) => (total += findOptPrice(productDoc.paperTypes, p)));
-      parseArray(gsm).forEach((g) => (total += findOptPrice(productDoc.gsmOptions, g)));
-
-      // ✅ add-on pricing (boolean)
-      if (parseBoolean(boxPacking)) total += Number(productDoc.boxPacking ?? 0);
-      if (parseBoolean(roundCorners)) total += Number(productDoc.roundCorners ?? 0);
-      if (parseBoolean(bigSizeCard)) total += Number(productDoc.bigSizeCard ?? 0);
-      if (parseBoolean(padding)) total += Number(productDoc.padding ?? 0);
-      if (parseBoolean(creasing)) total += Number(productDoc.creasing ?? 0);
-      if (parseBoolean(scoring)) total += Number(productDoc.scoring ?? 0);
-      if (parseBoolean(shapeCutting)) total += Number(productDoc.shapeCutting ?? 0);
-
-      // ✅ special options
-      const userSpecialOptions = parseArray(specialOptions);
-      if (Array.isArray(productDoc.specialOptions) && productDoc.specialOptions.length > 0) {
-        userSpecialOptions.forEach((opt) => {
-          const found = productDoc.specialOptions.find(
-            (so) => so && (so.name === opt || so === opt)
-          );
-          if (found) total += Number(found.price ?? 0);
-        });
+    // Parse specific fields - Convert arrays to strings for schema validation
+    const parsedPrintingType = parseString(printingType);
+    const parsedLaminationType = parseArray(laminationType); // Keep as array for laminationTypes
+    const parsedSize = parseString(size); // Convert to string, not array
+    const parsedBoardType = parseString(boardType); // Convert to string
+    const parsedPaperType = parseString(paperType); // Convert to string
+    const parsedGsm = parseString(gsm); // Convert to string
+    const parsedSpecialOptions = parseArray(specialOptions);
+    
+    // Handle boardThickness - format properly
+    let parsedBoardThickness = '';
+    if (boardThickness) {
+      parsedBoardThickness = parseString(boardThickness);
+      // Format to match enum: "3mm" -> "3 mm"
+      if (parsedBoardThickness.includes('mm')) {
+        parsedBoardThickness = parsedBoardThickness.replace('mm', 'mm').replace(/(\d)(mm)/, '$1 $2');
       }
+    }
 
-      return total;
-    };
+    // Handle demmySize
+    let parsedDemmySize = parseString(demmySize);
 
-    const finalPrice = computePrice(product);
+   
 
-    // ✅ Build and save new order
-    const newOrder = new VisitingCardOrder({
-      productCategory,
-      productName,
-      category,
-      printingType: Array.isArray(printingType) ? printingType[0] : printingType,
-      quantity: parseNumberArray(quantity),
-      laminationType: parseArray(laminationType),
+    // Handle images from uploaded files
+    let imagePaths = [];
+    if (req.files && req.files.length > 0) {
+      imagePaths = req.files.map(file => `/uploads/visitingCards/${file.filename}`);
+      console.log("📸 Saved images:", imagePaths);
+    }
+
+    // ========== PRICE CALCULATION ==========
+    let finalPrice;
+    
+    if (price && !isNaN(parseFloat(price))) {
+      // Use the price provided by client
+      finalPrice = parseFloat(price);
+      console.log("💰 Using client-provided price:", finalPrice);
+    } else {
+      // Try to find product and calculate price
+      console.log("🔍 Looking up product for price calculation...");
+      const product = await Product.findOne({
+        productCategory: parseString(productCategory),
+        productName: parseString(productName)
+      }).lean();
+
+      if (product) {
+        console.log("✅ Found product:", product.name, "Base price:", product.basePrice);
+        
+        // Start with base price
+        finalPrice = parseFloat(product.basePrice || 100) * (parseInt(quantity) || 1);
+        
+        // Add feature prices
+        if (parseBoolean(boxPacking) && product.features?.boxPacking) {
+          finalPrice += parseFloat(product.features.boxPacking);
+        }
+        if (parseBoolean(roundCorners) && product.features?.roundCorners) {
+          finalPrice += parseFloat(product.features.roundCorners);
+        }
+        if (parseBoolean(bigSizeCard) && product.features?.bigSizeCard) {
+          finalPrice += parseFloat(product.features.bigSizeCard);
+        }
+        if (parseBoolean(padding) && product.features?.padding) {
+          finalPrice += parseFloat(product.features.padding);
+        }
+        if (parseBoolean(creasing) && product.features?.creasing) {
+          finalPrice += parseFloat(product.features.creasing);
+        }
+        if (parseBoolean(scoring) && product.features?.scoring) {
+          finalPrice += parseFloat(product.features.scoring);
+        }
+        if (parseBoolean(shapeCutting) && product.features?.shapeCutting) {
+          finalPrice += parseFloat(product.features.shapeCutting);
+        }
+        if (parseBoolean(dieCut) && product.features?.dieCut) {
+          finalPrice += parseFloat(product.features.dieCut);
+        }
+        
+        // Add option prices
+        const addOptionPrice = (options, selectedValue) => {
+          if (!options || !selectedValue) return 0;
+          const option = options.find(opt => opt.name === selectedValue);
+          return option ? parseFloat(option.price || 0) : 0;
+        };
+        
+        // Add printing type price
+        if (parsedPrintingType && product.printingTypes) {
+          const printingPrice = addOptionPrice(product.printingTypes, parsedPrintingType);
+          finalPrice += printingPrice;
+        }
+        
+        // Add lamination prices
+        if (parsedLaminationType.length > 0 && product.laminationTypes) {
+          parsedLaminationType.forEach(lamination => {
+            const laminationPrice = addOptionPrice(product.laminationTypes, lamination);
+            finalPrice += laminationPrice;
+          });
+        }
+        
+        console.log("💰 Calculated price:", finalPrice);
+      } else {
+        // Fallback to default calculation
+        console.log("⚠️ Product not found, using default calculation");
+        finalPrice = 100 * (parseInt(quantity) || 1);
+      }
+    }
+    
+    // Ensure price is valid number
+    if (isNaN(finalPrice) || finalPrice <= 0) {
+      finalPrice = 100 * (parseInt(quantity) || 1);
+    }
+    
+    console.log("💰 Final price:", finalPrice);
+
+    // Create visiting card order
+    const newVisitingCard = new VisitingCardOrder({
+      productCategory: parseString(productCategory),
+      productName: parseString(productName),
+      printingType: parsedPrintingType,
+      quantity: parseInt(quantity) || 1,
+      laminationType: parsedLaminationType, // This should remain as array
       boxPacking: parseBoolean(boxPacking),
       roundCorners: parseBoolean(roundCorners),
       bigSizeCard: parseBoolean(bigSizeCard),
-      cardSizeMultiplier: Number(cardSizeMultiplier) || 1,
-      size: parseArray(size),
+      cardSizeMultiplier: parseInt(cardSizeMultiplier) || 1,
+      size: parsedSize, // This should be a string, not array
       padding: parseBoolean(padding),
-      boardType: parseArray(boardType),
-      boardThickness: Array.isArray(boardThickness)
-        ? boardThickness[0]
-        : boardThickness,
-      specialOptions: Array.isArray(specialOptions)
-        ? specialOptions[0]
-        : specialOptions,
-      specialNotes: Array.isArray(specialNotes)
-        ? specialNotes[0]
-        : specialNotes,
-      paperType: parseArray(paperType),
-      gsm: parseArray(gsm),
-      images: parseArray(images),
       creasing: parseBoolean(creasing),
       scoring: parseBoolean(scoring),
       shapeCutting: parseBoolean(shapeCutting),
+      dieCut: parseBoolean(dieCut),
+      boardType: parsedBoardType, // This should be a string, not array
+      boardThickness: parsedBoardThickness,
+      paperType: parsedPaperType, // This should be a string, not array
+      gsm: parsedGsm, // This should be a string, not array
+      demmySize: parsedDemmySize,
+      specialOptions: parsedSpecialOptions,
+      specialNotes: parseString(specialNotes),
+      images: imagePaths,
       price: finalPrice,
+      deliveryPrice: 50,
+      totalPrice: finalPrice + 50,
+      orderStatus: 'pending'
     });
 
-    await newOrder.save();
+    console.log("📋 Visiting Card to save:", JSON.stringify(newVisitingCard, null, 2));
+
+    // Validate before saving
+    await newVisitingCard.validate();
+
+    await newVisitingCard.save();
+
+    console.log("✅ Visiting Card saved successfully with ID:", newVisitingCard._id);
 
     return res.status(201).json({
       success: true,
-      message: "Visiting card order created successfully",
-      data: newOrder,
+      message: "Visiting card created successfully",
+      data: newVisitingCard
     });
+
   } catch (error) {
-    console.error("❌ Error creating visiting card order:", error);
+    console.error("❌ Error creating visiting card:", error);
+    console.error("❌ Stack trace:", error.stack);
+    
+    // Provide more specific error messages
+    let errorMessage = "Server error while creating visiting card.";
+    if (error.name === 'ValidationError') {
+      errorMessage = `Validation error: ${Object.values(error.errors).map(e => e.message).join(', ')}`;
+    }
+    
     res.status(500).json({
       success: false,
-      message: "Server error while creating visiting card order.",
-      error: error.message,
+      message: errorMessage,
+      error: error.message
     });
   }
 };
-// ✅ GET all visiting card orders
+
+// ✅ READ: Get all visiting card orders
 exports.getAllVisitingCards = async (req, res) => {
   try {
-    const visitingCards = await VisitingCardOrder.find().sort({ createdAt: -1 });
+    const { 
+      page = 1, 
+      limit = 10, 
+      productCategory, 
+      productName,
+      status 
+    } = req.query;
+    
+    const filter = {};
+    
+    if (productCategory) filter.productCategory = productCategory;
+    if (productName) filter.productName = productName;
+    if (status) filter.orderStatus = status;
+    
+    const skip = (page - 1) * limit;
+    
+    const visitingCards = await VisitingCardOrder.find(filter)
+      .populate('userId', 'name email mobile')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+    
+    const total = await VisitingCardOrder.countDocuments(filter);
+    const totalPages = Math.ceil(total / limit);
 
     if (!visitingCards.length) {
-      return res.status(404).json({ success: false, message: "No visiting cards found" });
+      return res.status(200).json({
+        success: true,
+        message: "No visiting cards found",
+        data: [],
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          totalPages
+        }
+      });
     }
 
     res.status(200).json({
       success: true,
       message: "All visiting cards fetched successfully",
-      count: visitingCards.length,
       data: visitingCards,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages
+      }
     });
   } catch (error) {
     console.error("Error fetching visiting cards:", error);
-    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: "Internal server error", 
+      error: error.message 
+    });
   }
 };
 
-// ✅ GET a single visiting card order by ID
+// ✅ READ: Get single visiting card by ID
 exports.getSingleVisitingCard = async (req, res) => {
   try {
     const { id } = req.params;
-    const visitingCard = await VisitingCardOrder.findById(id);
-
+    
+    const visitingCard = await VisitingCardOrder.findById(id)
+      .populate('userId', 'name email mobile location');
+    
     if (!visitingCard) {
-      return res.status(404).json({ success: false, message: "Visiting card not found" });
+      return res.status(404).json({ 
+        success: false, 
+        message: "Visiting card not found" 
+      });
     }
 
     res.status(200).json({
@@ -357,9 +612,480 @@ exports.getSingleVisitingCard = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching visiting card by ID:", error);
-    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: "Internal server error", 
+      error: error.message 
+    });
   }
 };
+
+// // ✅ READ: Get visiting cards by user ID
+// exports.getVisitingCardsByUserId = async (req, res) => {
+//   try {
+//     const { userId } = req.params;
+//     const { page = 1, limit = 10, status } = req.query;
+    
+//     const filter = { userId };
+//     if (status) filter.orderStatus = status;
+    
+//     const skip = (page - 1) * limit;
+    
+//     const visitingCards = await VisitingCardOrder.find(filter)
+//       .sort({ createdAt: -1 })
+//       .skip(skip)
+//       .limit(parseInt(limit));
+    
+//     const total = await VisitingCardOrder.countDocuments(filter);
+//     const totalPages = Math.ceil(total / limit);
+
+//     res.status(200).json({
+//       success: true,
+//       message: "User's visiting cards fetched successfully",
+//       data: visitingCards,
+//       pagination: {
+//         page: parseInt(page),
+//         limit: parseInt(limit),
+//         total,
+//         totalPages
+//       }
+//     });
+//   } catch (error) {
+//     console.error("Error fetching user's visiting cards:", error);
+//     res.status(500).json({ 
+//       success: false, 
+//       message: "Internal server error", 
+//       error: error.message 
+//     });
+//   }
+// };
+
+// // ✅ UPDATE: Update visiting card by ID
+// exports.updateVisitingCard = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const updateData = req.body;
+
+//     // Parse boolean fields
+//     const parseBoolean = (val) => {
+//       if (typeof val === "boolean") return val;
+//       if (val === undefined || val === null) return undefined;
+//       const s = val.toString().toLowerCase();
+//       return s === "yes" || s === "true" || s === "1";
+//     };
+
+//     const parseArray = (val) => {
+//       if (val === undefined || val === null) return undefined;
+//       if (Array.isArray(val)) return val;
+//       return [val];
+//     };
+
+//     // Prepare update object
+//     const updateObject = {};
+    
+//     // Handle each field
+//     const fields = [
+//       'productCategory', 'productName', 'printingType', 'quantity',
+//       'boardThickness', 'demmySize', 'specialNotes'
+//     ];
+    
+//     fields.forEach(field => {
+//       if (updateData[field] !== undefined) {
+//         updateObject[field] = updateData[field];
+//       }
+//     });
+
+//     // Handle boolean fields
+//     const booleanFields = [
+//       'boxPacking', 'roundCorners', 'bigSizeCard', 'padding',
+//       'creasing', 'scoring', 'shapeCutting', 'dieCut'
+//     ];
+    
+//     booleanFields.forEach(field => {
+//       if (updateData[field] !== undefined) {
+//         updateObject[field] = parseBoolean(updateData[field]);
+//       }
+//     });
+
+//     // Handle array fields
+//     const arrayFields = [
+//       'laminationType', 'size', 'boardType', 'paperType',
+//       'gsm', 'specialOptions', 'images'
+//     ];
+    
+//     arrayFields.forEach(field => {
+//       if (updateData[field] !== undefined) {
+//         updateObject[field] = parseArray(updateData[field]);
+//       }
+//     });
+
+//     // Handle custom size
+//     if (updateData.customSize !== undefined) {
+//       if (typeof updateData.customSize === 'object') {
+//         updateObject.customSize = updateData.customSize;
+//       } else if (typeof updateData.customSize === 'string') {
+//         try {
+//           updateObject.customSize = JSON.parse(updateData.customSize);
+//         } catch (e) {
+//           const dimensions = updateData.customSize.split('x').map(d => parseInt(d.trim()));
+//           if (dimensions.length === 2) {
+//             updateObject.customSize = {
+//               height: dimensions[0],
+//               width: dimensions[1],
+//               unit: 'inches'
+//             };
+//           }
+//         }
+//       }
+//     }
+
+//     // Handle card size multiplier
+//     if (updateData.cardSizeMultiplier !== undefined) {
+//       updateObject.cardSizeMultiplier = Number(updateData.cardSizeMultiplier) || 1;
+//     }
+
+//     // Handle price update
+//     if (updateData.price !== undefined) {
+//       updateObject.price = Number(updateData.price) || 0;
+//       updateObject.totalPrice = updateObject.price + (updateObject.deliveryPrice || 50);
+//     }
+
+//     // Update timestamp
+//     updateObject.updatedAt = Date.now();
+
+//     const updatedCard = await VisitingCardOrder.findByIdAndUpdate(
+//       id,
+//       updateObject,
+//       { new: true, runValidators: true }
+//     );
+
+//     if (!updatedCard) {
+//       return res.status(404).json({ 
+//         success: false, 
+//         message: "Visiting card not found" 
+//       });
+//     }
+
+//     res.status(200).json({
+//       success: true,
+//       message: "Visiting card updated successfully",
+//       data: updatedCard
+//     });
+//   } catch (error) {
+//     console.error("Error updating visiting card:", error);
+//     res.status(500).json({ 
+//       success: false, 
+//       message: "Internal server error", 
+//       error: error.message 
+//     });
+//   }
+// };
+
+// // ✅ DELETE: Delete visiting card by ID
+// exports.deleteVisitingCard = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+
+//     const deletedCard = await VisitingCardOrder.findByIdAndDelete(id);
+
+//     if (!deletedCard) {
+//       return res.status(404).json({ 
+//         success: false, 
+//         message: "Visiting card not found" 
+//       });
+//     }
+
+//     res.status(200).json({
+//       success: true,
+//       message: "Visiting card deleted successfully",
+//       data: deletedCard
+//     });
+//   } catch (error) {
+//     console.error("Error deleting visiting card:", error);
+//     res.status(500).json({ 
+//       success: false, 
+//       message: "Internal server error", 
+//       error: error.message 
+//     });
+//   }
+// };
+
+// // ✅ DELETE: Delete multiple visiting cards
+// exports.deleteMultipleVisitingCards = async (req, res) => {
+//   try {
+//     const { ids } = req.body;
+
+//     if (!Array.isArray(ids) || ids.length === 0) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Please provide an array of IDs to delete"
+//       });
+//     }
+
+//     const result = await VisitingCardOrder.deleteMany({
+//       _id: { $in: ids }
+//     });
+
+//     if (result.deletedCount === 0) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "No visiting cards found to delete"
+//       });
+//     }
+
+//     res.status(200).json({
+//       success: true,
+//       message: `${result.deletedCount} visiting card(s) deleted successfully`
+//     });
+//   } catch (error) {
+//     console.error("Error deleting multiple visiting cards:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Internal server error",
+//       error: error.message
+//     });
+//   }
+// };
+
+// // ✅ UPDATE: Update visiting card status
+// exports.updateVisitingCardStatus = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const { status } = req.body;
+
+//     const validStatuses = ['pending', 'processing', 'completed', 'cancelled'];
+    
+//     if (!status || !validStatuses.includes(status)) {
+//       return res.status(400).json({
+//         success: false,
+//         message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+//       });
+//     }
+
+//     const updatedCard = await VisitingCardOrder.findByIdAndUpdate(
+//       id,
+//       { 
+//         orderStatus: status,
+//         updatedAt: Date.now()
+//       },
+//       { new: true }
+//     );
+
+//     if (!updatedCard) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Visiting card not found"
+//       });
+//     }
+
+//     res.status(200).json({
+//       success: true,
+//       message: `Visiting card status updated to ${status}`,
+//       data: updatedCard
+//     });
+//   } catch (error) {
+//     console.error("Error updating visiting card status:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Internal server error",
+//       error: error.message
+//     });
+//   }
+// };
+
+// // ✅ SEARCH: Search visiting cards
+// exports.searchVisitingCards = async (req, res) => {
+//   try {
+//     const { query } = req.query;
+//     const { page = 1, limit = 10 } = req.query;
+    
+//     if (!query) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Search query is required"
+//       });
+//     }
+
+//     const skip = (page - 1) * limit;
+    
+//     const searchResults = await VisitingCardOrder.find({
+//       $or: [
+//         { productCategory: { $regex: query, $options: 'i' } },
+//         { productName: { $regex: query, $options: 'i' } },
+//         { specialNotes: { $regex: query, $options: 'i' } },
+//         { 'userId.name': { $regex: query, $options: 'i' } }
+//       ]
+//     })
+//     .populate('userId', 'name email mobile')
+//     .sort({ createdAt: -1 })
+//     .skip(skip)
+//     .limit(parseInt(limit));
+    
+//     const total = await VisitingCardOrder.countDocuments({
+//       $or: [
+//         { productCategory: { $regex: query, $options: 'i' } },
+//         { productName: { $regex: query, $options: 'i' } },
+//         { specialNotes: { $regex: query, $options: 'i' } },
+//         { 'userId.name': { $regex: query, $options: 'i' } }
+//       ]
+//     });
+    
+//     const totalPages = Math.ceil(total / limit);
+
+//     res.status(200).json({
+//       success: true,
+//       message: "Search results fetched successfully",
+//       data: searchResults,
+//       pagination: {
+//         page: parseInt(page),
+//         limit: parseInt(limit),
+//         total,
+//         totalPages
+//       }
+//     });
+//   } catch (error) {
+//     console.error("Error searching visiting cards:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Internal server error",
+//       error: error.message
+//     });
+//   }
+// };
+
+// // ✅ STATS: Get visiting card statistics
+// exports.getVisitingCardStats = async (req, res) => {
+//   try {
+//     const stats = await VisitingCardOrder.aggregate([
+//       {
+//         $group: {
+//           _id: null,
+//           totalOrders: { $sum: 1 },
+//           totalRevenue: { $sum: "$totalPrice" },
+//           averageOrderValue: { $avg: "$totalPrice" },
+//           pendingOrders: {
+//             $sum: { $cond: [{ $eq: ["$orderStatus", "pending"] }, 1, 0] }
+//           },
+//           processingOrders: {
+//             $sum: { $cond: [{ $eq: ["$orderStatus", "processing"] }, 1, 0] }
+//           },
+//           completedOrders: {
+//             $sum: { $cond: [{ $eq: ["$orderStatus", "completed"] }, 1, 0] }
+//           },
+//           cancelledOrders: {
+//             $sum: { $cond: [{ $eq: ["$orderStatus", "cancelled"] }, 1, 0] }
+//           }
+//         }
+//       }
+//     ]);
+
+//     // Get orders by product category
+//     const categoryStats = await VisitingCardOrder.aggregate([
+//       {
+//         $group: {
+//           _id: "$productCategory",
+//           count: { $sum: 1 },
+//           totalRevenue: { $sum: "$totalPrice" }
+//         }
+//       },
+//       { $sort: { count: -1 } }
+//     ]);
+
+//     // Get recent orders
+//     const recentOrders = await VisitingCardOrder.find()
+//       .sort({ createdAt: -1 })
+//       .limit(5)
+//       .populate('userId', 'name email');
+
+//     res.status(200).json({
+//       success: true,
+//       message: "Statistics fetched successfully",
+//       data: {
+//         overview: stats[0] || {},
+//         categories: categoryStats,
+//         recentOrders
+//       }
+//     });
+//   } catch (error) {
+//     console.error("Error fetching statistics:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Internal server error",
+//       error: error.message
+//     });
+//   }
+// };
+
+// // ✅ FILTER: Filter visiting cards by date range
+// exports.filterVisitingCardsByDate = async (req, res) => {
+//   try {
+//     const { startDate, endDate, page = 1, limit = 10 } = req.query;
+    
+//     if (!startDate || !endDate) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Start date and end date are required"
+//       });
+//     }
+
+//     const start = new Date(startDate);
+//     const end = new Date(endDate);
+//     end.setHours(23, 59, 59, 999);
+
+//     const skip = (page - 1) * limit;
+    
+//     const filter = {
+//       createdAt: {
+//         $gte: start,
+//         $lte: end
+//       }
+//     };
+
+//     const visitingCards = await VisitingCardOrder.find(filter)
+//       .populate('userId', 'name email mobile')
+//       .sort({ createdAt: -1 })
+//       .skip(skip)
+//       .limit(parseInt(limit));
+    
+//     const total = await VisitingCardOrder.countDocuments(filter);
+//     const totalPages = Math.ceil(total / limit);
+
+//     // Calculate revenue for the period
+//     const revenueStats = await VisitingCardOrder.aggregate([
+//       {
+//         $match: filter
+//       },
+//       {
+//         $group: {
+//           _id: null,
+//           totalRevenue: { $sum: "$totalPrice" },
+//           totalOrders: { $sum: 1 },
+//           averageOrderValue: { $avg: "$totalPrice" }
+//         }
+//       }
+//     ]);
+
+//     res.status(200).json({
+//       success: true,
+//       message: "Visiting cards filtered by date successfully",
+//       data: visitingCards,
+//       stats: revenueStats[0] || {},
+//       pagination: {
+//         page: parseInt(page),
+//         limit: parseInt(limit),
+//         total,
+//         totalPages
+//       }
+//     });
+//   } catch (error) {
+//     console.error("Error filtering visiting cards by date:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Internal server error",
+//       error: error.message
+//     });
+//   }
+// };
 
 
 

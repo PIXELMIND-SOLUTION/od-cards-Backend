@@ -1,25 +1,76 @@
+// models/Cart.js
 const mongoose = require('mongoose');
 
-const cartSchema = new mongoose.Schema({
+const cartItemSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
+    required: true
   },
-  visitingCardId: {
+  
+  // Store the entire visiting card order data
+  visitingCardOrder: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'VisitingCardOrder', // ✅ reference updated
+    ref: 'VisitingCardOrder',
+    required: true
   },
+  
+  // Or store all details directly (for backup)
+  orderDetails: {
+    productCategory: String,
+    productName: String,
+    printingType: String,
+    quantity: Number,
+    laminationType: [String],
+    boxPacking: Boolean,
+    roundCorners: Boolean,
+    bigSizeCard: Boolean,
+    padding: Boolean,
+    creasing: Boolean,
+    scoring: Boolean,
+    shapeCutting: Boolean,
+    dieCut: Boolean,
+    cardSizeMultiplier: Number,
+    size: [String],
+    boardType: [String],
+    boardThickness: String,
+    paperType: [String],
+    gsm: [String],
+    specialOptions: [String],
+    specialNotes: String,
+    images: [String]
+  },
+  
+  // Design file
+  designFile: {
+    type: String
+  },
+  
+  // Pricing
+  itemPrice: {
+    type: Number,
+    default: 0
+  },
+  deliveryPrice: {
+    type: Number,
+    default: 50
+  },
+  totalPrice: {
+    type: Number,
+    default: 0
+  },
+  
   quantity: {
     type: Number,
-    min: 1,
-    default: 1
+    default: 1,
+    min: 1
   },
-  designFile: {
-    type: String,
-    default: null
-  },
-  deliveryPrice: { type: Number, default: 0 },
-  totalPrice: { type: Number, default: 0 },
-}, { timestamps: true });
+  
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
 
-module.exports = mongoose.model('Cart', cartSchema);
+const Cart = mongoose.model('Cart', cartItemSchema);
+module.exports = Cart;

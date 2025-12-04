@@ -4,24 +4,25 @@ const router = express.Router();
 const multer = require('multer');
 const upload = multer();
 
-const { registerUser,
-    getAllUsers,
-    getUserById,
-    updateUserById,
-    deleteUserById,
-    addToCart,
-    getAllCartItems,
-    getCartById,
-    getMyCart,
-    updateCartById,
-    deleteCartById,
-    createOrder,
-    getAllOrders,
-    getOrderById,
-    getMyOrders,
-    getSingleOrder,
-    updateOrderById,
-    deleteOrderById
+const {
+  registerUser,
+  getAllUsers,
+  getUserById,
+  updateUserById,
+  deleteUserById,
+  addToCart,
+  getAllCartItems,
+  getCartById,
+  getMyCart,
+  updateCartById,
+  deleteCartById,
+  createOrder,
+  getAllOrders,
+  getOrderById,
+  getMyOrders,
+  getSingleOrder,
+  updateOrderById,
+  deleteOrderById
 } = require("../controllers/UserController");
 const { uploadDesignFile } = require('../middleware/upload');
 
