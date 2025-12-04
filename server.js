@@ -47,5 +47,5 @@ app.use('/api/contactus', Contactus);
 app.use("/api/banners", bannerRoutes);
 app.use('/api/marquees', marqueeRoutes);
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5124;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
