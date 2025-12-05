@@ -90,7 +90,7 @@ const visitingCardOrderSchema = new mongoose.Schema({
   },
   
   quantity: {
-    type: Number,
+    type: [Number], // Changed to array
     required: true,
     min: 1
   },
