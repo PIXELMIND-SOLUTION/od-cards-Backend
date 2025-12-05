@@ -632,231 +632,468 @@ exports.deleteCartById = async (req, res) => {
 
 
 
+
 exports.createOrder = async (req, res) => {
   try {
-    const mongoose = require("mongoose");
-    const body = req.body || {};
+    const { userId, cartId } = req.body;
 
-    // ✅ Convert userId to ObjectId because Cart schema uses ObjectId
-    const userId = new mongoose.Types.ObjectId(body.userId || body["userId"]);
-    const addressId = body.addressId || body["addressId"];
+    console.log("📦 Creating Order for userId:", userId, "cartId:", cartId);
 
-    if (!userId || !addressId) {
-      return res.status(400).json({ success: false, message: "userId and addressId are required" });
+    // Validate required fields
+    if (!userId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'userId is required' 
+      });
     }
 
-    const address = await Address.findById(addressId);
+    if (!cartId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'cartId is required' 
+      });
+    }
+
+    // Check if user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
+    }
+
+    // Handle both single cartId and array of cartIds
+    const cartIds = Array.isArray(cartId) ? cartId : [cartId];
+    
+    // Get cart items
+    const cartItems = await Cart.find({ 
+      _id: { $in: cartIds }, 
+      userId 
+    })
+      .populate({
+        path: 'visitingCardOrder',
+        select: 'productName price images productCategory printingType laminationType'
+      })
+      .populate({
+        path: 'userId',
+        select: 'name email mobile location'
+      });
+
+    if (!cartItems || cartItems.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Cart item(s) not found or do not belong to the user' 
+      });
+    }
+
+    // Get user's default address or first address
+    const address = await Address.findOne({ userId }).sort({ createdAt: -1 });
+    
     if (!address) {
-      return res.status(404).json({ success: false, message: "Address not found" });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No address found. Please add an address before placing an order.' 
+      });
     }
 
-    // ✅ FIXED — use ObjectId userId to fetch cart
-    const cartItems = await Cart.find({ userId })
-      .populate("visitingCardId", "productName price");
+    // Calculate totals and prepare order items
+    let subtotal = 0;
+    let totalDeliveryCharges = 0;
+    const orderItems = [];
 
-    if (!cartItems.length) {
-      return res.status(400).json({ success: false, message: "No items in cart" });
-    }
+    for (let cartItem of cartItems) {
+      if (!cartItem.visitingCardOrder) {
+        console.error("❌ Missing visitingCardOrder for cart item:", cartItem._id);
+        continue;
+      }
 
-    let orderTotal = 0;
+      subtotal += cartItem.itemPrice || 0;
+      totalDeliveryCharges += cartItem.deliveryPrice || 50;
 
-    const items = cartItems.map(item => {
-      const price = item.visitingCardId?.price || 0;
-      const totalPrice = price * item.quantity + item.deliveryPrice;
-      orderTotal += totalPrice;
-
-      return {
-        visitingCardId: item.visitingCardId._id,
-        quantity: item.quantity,
-        designFile: item.designFile,
-        deliveryPrice: item.deliveryPrice,
-        totalPrice
+      const orderItem = {
+        cartId: cartItem._id,
+        visitingCardOrder: cartItem.visitingCardOrder._id,
+        orderDetails: {
+          productCategory: cartItem.orderDetails?.productCategory || cartItem.visitingCardOrder.productCategory,
+          productName: cartItem.orderDetails?.productName || cartItem.visitingCardOrder.productName,
+          printingType: cartItem.orderDetails?.printingType || cartItem.visitingCardOrder.printingType,
+          quantity: cartItem.quantity || 1,
+          laminationType: cartItem.orderDetails?.laminationType || cartItem.visitingCardOrder.laminationType || [],
+          boxPacking: cartItem.orderDetails?.boxPacking || false,
+          roundCorners: cartItem.orderDetails?.roundCorners || false,
+          bigSizeCard: cartItem.orderDetails?.bigSizeCard || false,
+          padding: cartItem.orderDetails?.padding || false,
+          creasing: cartItem.orderDetails?.creasing || false,
+          scoring: cartItem.orderDetails?.scoring || false,
+          shapeCutting: cartItem.orderDetails?.shapeCutting || false,
+          dieCut: cartItem.orderDetails?.dieCut || false,
+          cardSizeMultiplier: cartItem.orderDetails?.cardSizeMultiplier || 1,
+          size: cartItem.orderDetails?.size || [],
+          boardType: cartItem.orderDetails?.boardType || [],
+          boardThickness: cartItem.orderDetails?.boardThickness || '',
+          paperType: cartItem.orderDetails?.paperType || [],
+          gsm: cartItem.orderDetails?.gsm || [],
+          specialOptions: cartItem.orderDetails?.specialOptions || [],
+          specialNotes: cartItem.orderDetails?.specialNotes || '',
+          images: cartItem.orderDetails?.images || cartItem.visitingCardOrder.images || []
+        },
+        designFile: cartItem.designFile || '',
+        itemPrice: cartItem.itemPrice || 0,
+        deliveryPrice: cartItem.deliveryPrice || 50,
+        quantity: cartItem.quantity || 1,
+        totalPrice: cartItem.totalPrice || (cartItem.itemPrice + cartItem.deliveryPrice)
       };
+
+      orderItems.push(orderItem);
+    }
+
+    if (orderItems.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No valid items to create order' 
+      });
+    }
+
+    const totalAmount = subtotal + totalDeliveryCharges;
+
+    console.log("💰 Order Summary:", {
+      subtotal,
+      totalDeliveryCharges,
+      totalAmount,
+      itemCount: orderItems.length
     });
 
-    const deliveryDate = new Date();
-    deliveryDate.setDate(deliveryDate.getDate() + 5);
+    // 🔥 IMPROVED: Generate UNIQUE orderNumber with better retry mechanism
+    const maxRetries = 10;
+    let lastError = null;
 
-    const orderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Generate highly unique order number
+        const timestamp = Date.now();
+        const randomPart = crypto.randomBytes(6).toString('hex').toUpperCase();
+        const orderNumber = `ORD-${timestamp}-${randomPart}`;
 
-    const newOrder = new Order({
-      userId,
-      addressId,
-      items,
-      orderTotal,
-      deliveredIn: "3-5 days",
-      deliveryDate,
-      orderId,
-    });
+        console.log(`🔄 Attempt ${attempt}/${maxRetries}: Trying orderNumber:`, orderNumber);
 
-    await newOrder.save();
+        // Create new order
+        const newOrder = new Order({
+          userId,
+          addressId: address._id,
+          orderNumber,
+          orderItems,
+          subtotal,
+          totalDeliveryCharges,
+          totalAmount,
+          paymentMethod: 'COD',
+          orderStatus: 'Pending',
+          paymentStatus: 'Pending'
+        });
 
-    // delete cart items
-    await Cart.deleteMany({ userId });
+        await newOrder.save();
+        console.log("✅ Order Created Successfully:", newOrder._id, "Order Number:", orderNumber);
 
-    res.status(201).json({
-      success: true,
-      message: "Order placed successfully",
-      order: newOrder
+        // Delete the cart items after successful order creation
+        await Cart.deleteMany({ 
+          _id: { $in: cartIds }, 
+          userId 
+        });
+        console.log("🗑️ Cart item(s) cleared");
+
+        // Populate order details for response
+        const populatedOrder = await Order.findById(newOrder._id)
+          .populate({
+            path: 'userId',
+            select: 'name email mobile location'
+          })
+          .populate({
+            path: 'addressId',
+            select: 'fullName mobile address city state pincode country'
+          })
+          .populate({
+            path: 'orderItems.visitingCardOrder',
+            select: 'productName price images productCategory printingType laminationType'
+          });
+
+        // Format response
+        const formattedOrder = {
+          _id: populatedOrder._id,
+          orderNumber: populatedOrder.orderNumber,
+          userId: {
+            _id: populatedOrder.userId._id,
+            name: populatedOrder.userId.name,
+            email: populatedOrder.userId.email,
+            mobile: populatedOrder.userId.mobile,
+            location: populatedOrder.userId.location
+          },
+          addressId: {
+            _id: populatedOrder.addressId._id,
+            fullName: populatedOrder.addressId.fullName,
+            mobile: populatedOrder.addressId.mobile,
+            address: populatedOrder.addressId.address,
+            city: populatedOrder.addressId.city,
+            state: populatedOrder.addressId.state,
+            pincode: populatedOrder.addressId.pincode,
+            country: populatedOrder.addressId.country
+          },
+          orderItems: populatedOrder.orderItems.map(item => ({
+            _id: item._id,
+            cartId: item.cartId,
+            visitingCardOrder: {
+              _id: item.visitingCardOrder._id,
+              productName: item.visitingCardOrder.productName,
+              price: item.visitingCardOrder.price,
+              images: item.visitingCardOrder.images,
+              productCategory: item.visitingCardOrder.productCategory,
+              printingType: item.visitingCardOrder.printingType,
+              laminationType: item.visitingCardOrder.laminationType
+            },
+            orderDetails: item.orderDetails,
+            designFile: item.designFile,
+            itemPrice: item.itemPrice,
+            deliveryPrice: item.deliveryPrice,
+            quantity: item.quantity,
+            totalPrice: item.totalPrice,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt
+          })),
+          subtotal: populatedOrder.subtotal,
+          totalDeliveryCharges: populatedOrder.totalDeliveryCharges,
+          totalAmount: populatedOrder.totalAmount,
+          paymentMethod: populatedOrder.paymentMethod,
+          orderStatus: populatedOrder.orderStatus,
+          paymentStatus: populatedOrder.paymentStatus,
+          createdAt: populatedOrder.createdAt,
+          updatedAt: populatedOrder.updatedAt
+        };
+
+        // ✅ Success - return the response
+        return res.status(201).json({
+          success: true,
+          message: 'Order created successfully',
+          data: formattedOrder
+        });
+
+      } catch (error) {
+        lastError = error;
+        
+        // Check if it's a duplicate key error
+        if (error.code === 11000) {
+          console.log(`⚠️ Duplicate orderNumber on attempt ${attempt}. Retrying...`);
+          
+          // Wait before retry (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, 50 * attempt));
+          continue;
+        } else {
+          // For non-duplicate errors, throw immediately
+          throw error;
+        }
+      }
+    }
+
+    // If we've exhausted all retries
+    console.error("❌ Failed to create order after", maxRetries, "attempts");
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to generate unique order number after multiple attempts. Please try again.',
+      error: lastError?.message || 'MAX_RETRIES_EXCEEDED'
     });
 
   } catch (error) {
-    console.error("Order creation error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error('❌ Error creating order:', error);
+    
+    // Handle specific errors
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: Object.values(error.errors).map(err => err.message)
+      });
+    }
+    
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Duplicate entry detected. This should not happen. Please contact support.',
+        details: error.keyPattern
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal server error' 
+    });
   }
 };
-
-
 
 // ---------------- GET ALL ORDERS ----------------
 exports.getAllOrders = async (req, res) => {
   try {
-    const orders = await Order.find().populate("addressId").sort({ createdAt: -1 });
-    if (!orders.length) return res.status(404).json({ success: false, message: "No orders found" });
-    res.status(200).json({ success: true, orders });
+    const orders = await Order.find()
+      .populate("userId", "name email mobile")
+      .populate("addressId")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: orders.length,
+      data: orders,
+    });
   } catch (error) {
-    console.error("Error fetching all orders:", error);
-    res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
+    console.error("Fetching orders error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Error fetching orders",
+    });
   }
 };
+
 
 // ---------------- GET ORDER BY ID ----------------
 exports.getOrderById = async (req, res) => {
   try {
-    const { orderId } = req.params;
-    const order = await Order.findById(orderId).populate("addressId");
-    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
-    res.status(200).json({ success: true, order });
+    const order = await Order.findById(req.params.id)
+      .populate("userId", "name email mobile")
+      .populate("addressId");
+
+    if (!order)
+      return res.status(404).json({ success: false, message: "Order not found" });
+
+    res.status(200).json({ success: true, data: order });
   } catch (error) {
-    console.error("Error fetching order by ID:", error);
-    res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
+    console.error("Error order by id:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 
+
 exports.getMyOrders = async (req, res) => {
-     try {
-    const { userId } = req.params;
-    const { status } = req.query; // 👈 get status from query
-
-    if (!userId) {
-      return res.status(400).json({ success: false, message: 'User ID is required' });
-    }
-
-    const query = { userId };
-    if (status) query.status = status; // filter by status if provided
-
-    const orders = await Order.find(query)
-      .populate('addressId')
+  try {
+    const orders = await Order.find({ userId: req.params.userId })
+      .populate("addressId")
       .sort({ createdAt: -1 });
 
-    if (!orders.length) {
-      return res.status(404).json({ success: false, message: 'No orders found' });
-    }
-
-    res.status(200).json({ success: true, orders });
+    res.status(200).json({
+      success: true,
+      count: orders.length,
+      data: orders,
+    });
   } catch (error) {
-    console.error('Error fetching orders:', error);
+    console.error("Error fetching my orders:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 
+
 exports.getSingleOrder = async (req, res) => {
   try {
-    const { userId, orderId } = req.params;
+    const { id } = req.params;
 
-    if (!userId || !orderId) {
-      return res.status(400).json({ success: false, message: 'userId and orderId are required' });
-    }
+    const order = await Order.findById(id)
+      .populate("userId", "name email mobile location")
+      .populate("addressId")
+      .populate({
+        path: "cartItems.productId",
+        model: "VisitingCardOrder",
+        select: "productName price images printingType"
+      });
 
-    const order = await Order.findOne({ _id: orderId, userId }).populate('addressId');
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found for this user' });
-    }
-
-    const formattedItems = [];
-
-    for (const item of order.items) {
-      const product = await Product.findById(item.productId);
-      formattedItems.push({
-        product: {
-          id: product._id,
-          name: product.name,
-          description: product.description,
-          price: product.price,
-          offeredPrice: product.offeredPrice,
-          category: product.category,
-          subCategory: product.subCategory,
-          isInStock: product.isInStock,
-          quantityAvailable: product.quantity,
-          images: product.images,
-          createdAt: product.createdAt
-        },
-        quantity: item.quantity,
-        designFile: item.designFile,
-        deliveryPrice: item.deliveryPrice,
-        totalPrice: item.totalPrice
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
       });
     }
 
-    const formattedOrder = {
-      orderId: order._id,
-      orderTotal: order.orderTotal,
-      status: order.status,
-      deliveredIn: order.deliveredIn,
-      deliveryDate: order.deliveryDate,
-      createdAt: order.createdAt,
-      address: {
-        name: order.addressId.name,
-        email: order.addressId.email,
-        mobileNumber: order.addressId.mobileNumber,
-        addressline1: order.addressId.addressline1,
-        addressline2: order.addressId.addressline2,
-        city: order.addressId.city,
-        state: order.addressId.state,
-        pincode: order.addressId.pincode,
-        country: order.addressId.country,
-        type: order.addressId.type
-      },
-      items: formattedItems
-    };
-
     res.status(200).json({
       success: true,
-      order: formattedOrder
+      message: "Order fetched successfully",
+      data: order,
     });
 
   } catch (error) {
-    console.error('Error fetching single order:', error);
-    res.status(500).json({ success: false, message: error.message || 'Internal Server Error' });
+    console.error("Get single order error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
+
 
 // ---------------- UPDATE ORDER BY ID ----------------
 exports.updateOrderById = async (req, res) => {
   try {
-    const { orderId } = req.params;
-    const updates = req.body; // e.g., { status: "Shipped" }
+    const { id } = req.params;
+    const updateData = req.body;
 
-    const order = await Order.findByIdAndUpdate(orderId, updates, { new: true });
-    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+    // Allowed fields to update
+    const allowedUpdates = ["status", "addressId"];
+    const updates = {};
 
-    res.status(200).json({ success: true, message: "Order updated", order });
+    Object.keys(updateData).forEach((key) => {
+      if (allowedUpdates.includes(key)) {
+        updates[key] = updateData[key];
+      }
+    });
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid fields to update"
+      });
+    }
+
+    const updatedOrder = await Order.findByIdAndUpdate(id, updates, {
+      new: true,
+      runValidators: true,
+    })
+      .populate("userId", "name email mobile")
+      .populate("addressId");
+
+    if (!updatedOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Order updated successfully",
+      data: updatedOrder,
+    });
+
   } catch (error) {
-    console.error("Error updating order:", error);
-    res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
+    console.error("Update order error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 
+
 // ---------------- DELETE ORDER BY ID ----------------
-exports.deleteOrderById = async (req, res) => {
+exports.deleteOrder = async (req, res) => {
   try {
-    const { orderId } = req.params;
-    const order = await Order.findByIdAndDelete(orderId);
-    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
-    res.status(200).json({ success: true, message: "Order deleted", order });
+    const deleted = await Order.findByIdAndDelete(req.params.id);
+
+    if (!deleted)
+      return res.status(404).json({ success: false, message: "Order not found" });
+
+    res.status(200).json({
+      success: true,
+      message: "Order deleted successfully",
+      deleted,
+    });
   } catch (error) {
     console.error("Error deleting order:", error);
-    res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
+    res.status(500).json({ success: false, message: error.message });
   }
 };

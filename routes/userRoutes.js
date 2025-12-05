@@ -22,7 +22,7 @@ const {
   getMyOrders,
   getSingleOrder,
   updateOrderById,
-  deleteOrderById
+  deleteOrder
 } = require("../controllers/UserController");
 const { uploadDesignFile } = require('../middleware/upload');
 
@@ -37,12 +37,13 @@ router.get('/cart/:id', getCartById);
 router.get('/mycart/:userId', getMyCart);
 router.put('/cart/:id', updateCartById);
 router.delete('/cart/:id', deleteCartById);
-router.post('/create-order',createOrder);
-router.get("/getall-orders", getAllOrders);
-router.get("/getorder/:orderId", getOrderById);
-router.get('/myorders/:userId', getMyOrders);
-router.get('/mysingleorder/:userId/:orderId', getSingleOrder);
-router.put("/update-order/:orderId", updateOrderById);
-router.delete("/delete/:orderId", deleteOrderById);
+router.post('/create-order', createOrder);
+router.get('/getall-orders', getAllOrders);
+router.get('/getorder/:orderId', getOrderById);
 
+router.get('/myorders/:userId', getMyOrders);
+router.get('/mysingleorder/:id', getSingleOrder);
+
+router.put('/update-order/:orderId', updateOrderById);
+router.delete('/delete/:orderId', deleteOrder);
 module.exports = router;

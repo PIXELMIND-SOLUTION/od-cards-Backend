@@ -1495,29 +1495,35 @@ exports.getStickerDigitalPrints = async (req, res) => {
 
 exports.getAllCardsWithCat = async (req, res) => {
   try {
-    const { category } = req.body;
+    const { category } = req.query;  // ✅ Use query params instead of body
 
-    const filter = {};
+    let filter = {};
 
     if (category) {
-      filter.category = category;
+      filter.category = category;  // Match by category
     }
 
-    const visitingCardOrders = await VisitingCardOrder.find(filter).sort({ createdAt: -1 });
+    console.log("🔍 Filter:", filter);
 
-    return res.status(200).json({
-      message: 'Visiting card orders fetched successfully',
+    const visitingCardOrders = await VisitingCardOrder.find(filter)
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      message: "Visiting card orders fetched successfully",
       data: visitingCardOrders
     });
+
   } catch (error) {
-    console.error('Error fetching visiting card orders:', error);
-    return res.status(500).json({
-      message: 'Server error',
+    console.error("❌ Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Server error",
       error: error.message
     });
   }
 };
-
 
 exports.updateCard = async (req, res) => {
   try {
