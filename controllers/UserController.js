@@ -634,12 +634,11 @@ exports.deleteCartById = async (req, res) => {
 
 
 exports.createOrder = async (req, res) => {
-  try {
+   try {
     const { userId, cartId } = req.body;
 
-    console.log("📦 Creating Order for userId:", userId, "cartId:", cartId);
+    console.log("🛍️ Creating Order:", { userId, cartId });
 
-    // Validate required fields
     if (!userId) {
       return res.status(400).json({ 
         success: false, 
@@ -663,266 +662,106 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    // Handle both single cartId and array of cartIds
-    const cartIds = Array.isArray(cartId) ? cartId : [cartId];
-    
-    // Get cart items
-    const cartItems = await Cart.find({ 
-      _id: { $in: cartIds }, 
-      userId 
-    })
-      .populate({
-        path: 'visitingCardOrder',
-        select: 'productName price images productCategory printingType laminationType'
-      })
-      .populate({
-        path: 'userId',
-        select: 'name email mobile location'
-      });
-
-    if (!cartItems || cartItems.length === 0) {
+    // Check if cart item exists
+    const cartItem = await Cart.findById(cartId).populate('visitingCardOrder');
+    if (!cartItem) {
       return res.status(404).json({ 
         success: false, 
-        message: 'Cart item(s) not found or do not belong to the user' 
+        message: 'Cart item not found' 
       });
     }
 
-    // Get user's default address or first address
-    const address = await Address.findOne({ userId }).sort({ createdAt: -1 });
-    
-    if (!address) {
+    // Verify cart item belongs to the user
+    if (cartItem.userId.toString() !== userId) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Cart item does not belong to this user' 
+      });
+    }
+
+    // Check if cart item is already converted to an order
+    if (cartItem.isOrdered) {
       return res.status(400).json({ 
         success: false, 
-        message: 'No address found. Please add an address before placing an order.' 
+        message: 'This cart item has already been ordered' 
       });
     }
 
-    // Calculate totals and prepare order items
-    let subtotal = 0;
-    let totalDeliveryCharges = 0;
-    const orderItems = [];
+    // Generate order ID (you can customize this format)
+    const orderId = `ORD${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
-    for (let cartItem of cartItems) {
-      if (!cartItem.visitingCardOrder) {
-        console.error("❌ Missing visitingCardOrder for cart item:", cartItem._id);
-        continue;
-      }
-
-      subtotal += cartItem.itemPrice || 0;
-      totalDeliveryCharges += cartItem.deliveryPrice || 50;
-
-      const orderItem = {
-        cartId: cartItem._id,
-        visitingCardOrder: cartItem.visitingCardOrder._id,
-        orderDetails: {
-          productCategory: cartItem.orderDetails?.productCategory || cartItem.visitingCardOrder.productCategory,
-          productName: cartItem.orderDetails?.productName || cartItem.visitingCardOrder.productName,
-          printingType: cartItem.orderDetails?.printingType || cartItem.visitingCardOrder.printingType,
-          quantity: cartItem.quantity || 1,
-          laminationType: cartItem.orderDetails?.laminationType || cartItem.visitingCardOrder.laminationType || [],
-          boxPacking: cartItem.orderDetails?.boxPacking || false,
-          roundCorners: cartItem.orderDetails?.roundCorners || false,
-          bigSizeCard: cartItem.orderDetails?.bigSizeCard || false,
-          padding: cartItem.orderDetails?.padding || false,
-          creasing: cartItem.orderDetails?.creasing || false,
-          scoring: cartItem.orderDetails?.scoring || false,
-          shapeCutting: cartItem.orderDetails?.shapeCutting || false,
-          dieCut: cartItem.orderDetails?.dieCut || false,
-          cardSizeMultiplier: cartItem.orderDetails?.cardSizeMultiplier || 1,
-          size: cartItem.orderDetails?.size || [],
-          boardType: cartItem.orderDetails?.boardType || [],
-          boardThickness: cartItem.orderDetails?.boardThickness || '',
-          paperType: cartItem.orderDetails?.paperType || [],
-          gsm: cartItem.orderDetails?.gsm || [],
-          specialOptions: cartItem.orderDetails?.specialOptions || [],
-          specialNotes: cartItem.orderDetails?.specialNotes || '',
-          images: cartItem.orderDetails?.images || cartItem.visitingCardOrder.images || []
-        },
-        designFile: cartItem.designFile || '',
-        itemPrice: cartItem.itemPrice || 0,
-        deliveryPrice: cartItem.deliveryPrice || 50,
-        quantity: cartItem.quantity || 1,
-        totalPrice: cartItem.totalPrice || (cartItem.itemPrice + cartItem.deliveryPrice)
-      };
-
-      orderItems.push(orderItem);
-    }
-
-    if (orderItems.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'No valid items to create order' 
-      });
-    }
-
-    const totalAmount = subtotal + totalDeliveryCharges;
-
-    console.log("💰 Order Summary:", {
-      subtotal,
-      totalDeliveryCharges,
-      totalAmount,
-      itemCount: orderItems.length
+    // Create new order
+    const newOrder = new Order({
+      orderId,
+      userId,
+      cartId,
+      visitingCardOrder: cartItem.visitingCardOrder,
+      orderDetails: {
+        productCategory: cartItem.orderDetails.productCategory,
+        productName: cartItem.orderDetails.productName,
+        printingType: cartItem.orderDetails.printingType,
+        quantity: cartItem.quantity,
+        price: cartItem.orderDetails.price,
+        images: cartItem.orderDetails.images || []
+      },
+      designFile: cartItem.designFile,
+      itemPrice: cartItem.itemPrice,
+      deliveryPrice: cartItem.deliveryPrice,
+      totalPrice: cartItem.totalPrice,
+      quantity: cartItem.quantity,
+      orderStatus: 'pending',
+      paymentStatus: 'pending',
+      shippingAddress: user.location || {}
     });
 
-    // 🔥 IMPROVED: Generate UNIQUE orderNumber with better retry mechanism
-    const maxRetries = 10;
-    let lastError = null;
+    // Save the order
+    await newOrder.save();
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        // Generate highly unique order number
-        const timestamp = Date.now();
-        const randomPart = crypto.randomBytes(6).toString('hex').toUpperCase();
-        const orderNumber = `ORD-${timestamp}-${randomPart}`;
+    // Update cart item as ordered
+    cartItem.isOrdered = true;
+    cartItem.orderedAt = new Date();
+    cartItem.orderId = newOrder._id;
+    await cartItem.save();
 
-        console.log(`🔄 Attempt ${attempt}/${maxRetries}: Trying orderNumber:`, orderNumber);
+    // Get user details for response
+    const userDetails = await User.findById(userId).select('name email mobile location');
 
-        // Create new order
-        const newOrder = new Order({
-          userId,
-          addressId: address._id,
-          orderNumber,
-          orderItems,
-          subtotal,
-          totalDeliveryCharges,
-          totalAmount,
-          paymentMethod: 'COD',
-          orderStatus: 'Pending',
-          paymentStatus: 'Pending'
-        });
+    // Prepare response data
+    const responseData = {
+      _id: newOrder._id,
+      orderId: newOrder.orderId,
+      userId: {
+        _id: userDetails?._id,
+        name: userDetails?.name,
+        email: userDetails?.email,
+        mobile: userDetails?.mobile,
+        location: userDetails?.location
+      },
+      cartId: cartItem._id,
+      productId: cartItem.visitingCardOrder?._id,
+      productName: newOrder.orderDetails.productName,
+      quantity: newOrder.quantity,
+      itemPrice: newOrder.itemPrice,
+      deliveryPrice: newOrder.deliveryPrice,
+      totalPrice: newOrder.totalPrice,
+      orderStatus: newOrder.orderStatus,
+      paymentStatus: newOrder.paymentStatus,
+      shippingAddress: newOrder.shippingAddress,
+      designFile: newOrder.designFile,
+      createdAt: newOrder.createdAt
+    };
 
-        await newOrder.save();
-        console.log("✅ Order Created Successfully:", newOrder._id, "Order Number:", orderNumber);
-
-        // Delete the cart items after successful order creation
-        await Cart.deleteMany({ 
-          _id: { $in: cartIds }, 
-          userId 
-        });
-        console.log("🗑️ Cart item(s) cleared");
-
-        // Populate order details for response
-        const populatedOrder = await Order.findById(newOrder._id)
-          .populate({
-            path: 'userId',
-            select: 'name email mobile location'
-          })
-          .populate({
-            path: 'addressId',
-            select: 'fullName mobile address city state pincode country'
-          })
-          .populate({
-            path: 'orderItems.visitingCardOrder',
-            select: 'productName price images productCategory printingType laminationType'
-          });
-
-        // Format response
-        const formattedOrder = {
-          _id: populatedOrder._id,
-          orderNumber: populatedOrder.orderNumber,
-          userId: {
-            _id: populatedOrder.userId._id,
-            name: populatedOrder.userId.name,
-            email: populatedOrder.userId.email,
-            mobile: populatedOrder.userId.mobile,
-            location: populatedOrder.userId.location
-          },
-          addressId: {
-            _id: populatedOrder.addressId._id,
-            fullName: populatedOrder.addressId.fullName,
-            mobile: populatedOrder.addressId.mobile,
-            address: populatedOrder.addressId.address,
-            city: populatedOrder.addressId.city,
-            state: populatedOrder.addressId.state,
-            pincode: populatedOrder.addressId.pincode,
-            country: populatedOrder.addressId.country
-          },
-          orderItems: populatedOrder.orderItems.map(item => ({
-            _id: item._id,
-            cartId: item.cartId,
-            visitingCardOrder: {
-              _id: item.visitingCardOrder._id,
-              productName: item.visitingCardOrder.productName,
-              price: item.visitingCardOrder.price,
-              images: item.visitingCardOrder.images,
-              productCategory: item.visitingCardOrder.productCategory,
-              printingType: item.visitingCardOrder.printingType,
-              laminationType: item.visitingCardOrder.laminationType
-            },
-            orderDetails: item.orderDetails,
-            designFile: item.designFile,
-            itemPrice: item.itemPrice,
-            deliveryPrice: item.deliveryPrice,
-            quantity: item.quantity,
-            totalPrice: item.totalPrice,
-            createdAt: item.createdAt,
-            updatedAt: item.updatedAt
-          })),
-          subtotal: populatedOrder.subtotal,
-          totalDeliveryCharges: populatedOrder.totalDeliveryCharges,
-          totalAmount: populatedOrder.totalAmount,
-          paymentMethod: populatedOrder.paymentMethod,
-          orderStatus: populatedOrder.orderStatus,
-          paymentStatus: populatedOrder.paymentStatus,
-          createdAt: populatedOrder.createdAt,
-          updatedAt: populatedOrder.updatedAt
-        };
-
-        // ✅ Success - return the response
-        return res.status(201).json({
-          success: true,
-          message: 'Order created successfully',
-          data: formattedOrder
-        });
-
-      } catch (error) {
-        lastError = error;
-        
-        // Check if it's a duplicate key error
-        if (error.code === 11000) {
-          console.log(`⚠️ Duplicate orderNumber on attempt ${attempt}. Retrying...`);
-          
-          // Wait before retry (exponential backoff)
-          await new Promise(resolve => setTimeout(resolve, 50 * attempt));
-          continue;
-        } else {
-          // For non-duplicate errors, throw immediately
-          throw error;
-        }
-      }
-    }
-
-    // If we've exhausted all retries
-    console.error("❌ Failed to create order after", maxRetries, "attempts");
-    return res.status(500).json({
-      success: false,
-      message: 'Unable to generate unique order number after multiple attempts. Please try again.',
-      error: lastError?.message || 'MAX_RETRIES_EXCEEDED'
+    res.status(201).json({
+      success: true,
+      message: 'Order created successfully',
+      data: responseData
     });
 
   } catch (error) {
     console.error('❌ Error creating order:', error);
-    
-    // Handle specific errors
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: Object.values(error.errors).map(err => err.message)
-      });
-    }
-    
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'Duplicate entry detected. This should not happen. Please contact support.',
-        details: error.keyPattern
-      });
-    }
-    
     res.status(500).json({ 
       success: false, 
-      message: error.message || 'Internal server error' 
+      message: error.message || 'Internal server error'
     });
   }
 };
