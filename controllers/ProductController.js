@@ -529,7 +529,7 @@ exports.createVisitingCards = async (req, res) => {
 
 // ✅ READ: Get all visiting card orders
 exports.getAllVisitingCards = async (req, res) => {
-  try {
+ try {
     const { 
       page = 1, 
       limit = 10, 
@@ -551,28 +551,20 @@ exports.getAllVisitingCards = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
-    
+
     const total = await VisitingCardOrder.countDocuments(filter);
     const totalPages = Math.ceil(total / limit);
 
-    if (!visitingCards.length) {
-      return res.status(200).json({
-        success: true,
-        message: "No visiting cards found",
-        data: [],
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total,
-          totalPages
-        }
-      });
-    }
+    // ⭐ FIX: Always ensure quantity exists
+    const formattedCards = visitingCards.map(card => ({
+      ...card._doc,
+      quantity: card.quantity || 1
+    }));
 
     res.status(200).json({
       success: true,
-      message: "All visiting cards fetched successfully",
-      data: visitingCards,
+      message: visitingCards.length ? "All visiting cards fetched successfully" : "No visiting cards found",
+      data: formattedCards,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -580,6 +572,7 @@ exports.getAllVisitingCards = async (req, res) => {
         totalPages
       }
     });
+
   } catch (error) {
     console.error("Error fetching visiting cards:", error);
     res.status(500).json({ 
@@ -605,10 +598,16 @@ exports.getSingleVisitingCard = async (req, res) => {
       });
     }
 
+    // ⭐ FIX: Guarantee quantity exists
+    const formattedCard = {
+      ...visitingCard._doc,
+      quantity: visitingCard.quantity || 1
+    };
+
     res.status(200).json({
       success: true,
       message: "Visiting card fetched successfully",
-      data: visitingCard,
+      data: formattedCard,
     });
   } catch (error) {
     console.error("Error fetching visiting card by ID:", error);
@@ -619,7 +618,6 @@ exports.getSingleVisitingCard = async (req, res) => {
     });
   }
 };
-
 // // ✅ READ: Get visiting cards by user ID
 // exports.getVisitingCardsByUserId = async (req, res) => {
 //   try {
