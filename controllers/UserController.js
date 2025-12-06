@@ -767,17 +767,47 @@ exports.createOrder = async (req, res) => {
 };
 
 // ---------------- GET ALL ORDERS ----------------
+// ---------------- GET ALL ORDERS ----------------
 exports.getAllOrders = async (req, res) => {
   try {
     const orders = await Order.find()
-      .populate("userId", "name email mobile")
-      .populate("addressId")
+      .populate("userId", "name email mobile location")
+      .populate("visitingCardOrder") 
       .sort({ createdAt: -1 });
+
+    // Format the response to be consistent
+    const formattedOrders = orders.map(order => ({
+      _id: order._id,
+      orderId: order.orderId,
+      userId: order.userId ? {
+        _id: order.userId._id,
+        name: order.userId.name,
+        email: order.userId.email,
+        mobile: order.userId.mobile,
+        location: order.userId.location
+      } : null,
+      cartId: order.cartId,
+      productId: order.visitingCardOrder?._id,
+      productName: order.orderDetails?.productName || order.visitingCardOrder?.productName,
+      productCategory: order.orderDetails?.productCategory,
+      printingType: order.orderDetails?.printingType,
+      quantity: order.quantity,
+      itemPrice: order.itemPrice,
+      deliveryPrice: order.deliveryPrice,
+      totalPrice: order.totalPrice,
+      designFile: order.designFile || '',
+      images: order.orderDetails?.images || [],
+      orderStatus: order.orderStatus,
+      paymentStatus: order.paymentStatus,
+      shippingAddress: order.shippingAddress,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt
+    }));
 
     res.status(200).json({
       success: true,
-      count: orders.length,
-      data: orders,
+      count: formattedOrders.length,
+      data: formattedOrders,
     });
   } catch (error) {
     console.error("Fetching orders error:", error);
@@ -788,20 +818,75 @@ exports.getAllOrders = async (req, res) => {
   }
 };
 
-
 // ---------------- GET ORDER BY ID ----------------
 exports.getOrderById = async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id)
-      .populate("userId", "name email mobile")
-      .populate("addressId");
+    const { id } = req.params;
 
-    if (!order)
-      return res.status(404).json({ success: false, message: "Order not found" });
+    if (!id) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Order ID is required" 
+      });
+    }
 
-    res.status(200).json({ success: true, data: order });
+    const order = await Order.findById(id)
+      .populate("userId", "name email mobile location")
+      .populate("visitingCardOrder");
+
+    if (!order) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Order not found" 
+      });
+    }
+
+    // Format response with all necessary details
+    const responseData = {
+      _id: order._id,
+      orderId: order.orderId,
+      userId: order.userId ? {
+        _id: order.userId._id,
+        name: order.userId.name,
+        email: order.userId.email,
+        mobile: order.userId.mobile,
+        location: order.userId.location
+      } : null,
+      cartId: order.cartId,
+      productId: order.visitingCardOrder?._id,
+      productName: order.orderDetails?.productName || order.visitingCardOrder?.productName,
+      productCategory: order.orderDetails?.productCategory,
+      printingType: order.orderDetails?.printingType,
+      quantity: order.quantity,
+      itemPrice: order.itemPrice,
+      deliveryPrice: order.deliveryPrice,
+      totalPrice: order.totalPrice,
+      designFile: order.designFile || '',
+      images: order.orderDetails?.images || [],
+      orderStatus: order.orderStatus,
+      paymentStatus: order.paymentStatus,
+      shippingAddress: order.shippingAddress,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt
+    };
+
+    res.status(200).json({ 
+      success: true, 
+      message: "Order fetched successfully",
+      data: responseData 
+    });
+
   } catch (error) {
-    console.error("Error order by id:", error);
+    console.error("❌ Error fetching order by ID:", error);
+    
+    // Handle specific MongoDB errors
+    if (error.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID format"
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: error.message || "Internal server error",
@@ -809,23 +894,75 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
-
+// ---------------- GET ORDERS BY USER ID ----------------
 exports.getMyOrders = async (req, res) => {
   try {
-    const orders = await Order.find({ userId: req.params.userId })
-      .populate("addressId")
+    const { userId } = req.params; // Changed to use params
+    
+    if (!userId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "User ID is required" 
+      });
+    }
+
+    const orders = await Order.find({ userId: userId })
+      .populate("userId", "name email mobile location")
+      .populate("visitingCardOrder")
       .sort({ createdAt: -1 });
+
+    // Format the response
+    const formattedOrders = orders.map(order => ({
+      _id: order._id,
+      orderId: order.orderId,
+      userId: order.userId ? {
+        _id: order.userId._id,
+        name: order.userId.name,
+        email: order.userId.email,
+        mobile: order.userId.mobile,
+        location: order.userId.location
+      } : null,
+      cartId: order.cartId,
+      productId: order.visitingCardOrder?._id,
+      productName: order.orderDetails?.productName || order.visitingCardOrder?.productName,
+      productCategory: order.orderDetails?.productCategory,
+      printingType: order.orderDetails?.printingType,
+      quantity: order.quantity,
+      itemPrice: order.itemPrice,
+      deliveryPrice: order.deliveryPrice,
+      totalPrice: order.totalPrice,
+      designFile: order.designFile || '',
+      images: order.orderDetails?.images || [],
+      orderStatus: order.orderStatus,
+      paymentStatus: order.paymentStatus,
+      shippingAddress: order.shippingAddress,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt
+    }));
 
     res.status(200).json({
       success: true,
-      count: orders.length,
-      data: orders,
+      count: formattedOrders.length,
+      data: formattedOrders,
     });
   } catch (error) {
     console.error("Error fetching my orders:", error);
-    res.status(500).json({ success: false, message: error.message });
+    
+    if (error.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID format"
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || "Internal server error" 
+    });
   }
 };
+
+
 
 
 
@@ -835,12 +972,7 @@ exports.getSingleOrder = async (req, res) => {
 
     const order = await Order.findById(id)
       .populate("userId", "name email mobile location")
-      .populate("addressId")
-      .populate({
-        path: "cartItems.productId",
-        model: "VisitingCardOrder",
-        select: "productName price images printingType"
-      });
+      .populate("visitingCardOrder");
 
     if (!order) {
       return res.status(404).json({
@@ -849,10 +981,27 @@ exports.getSingleOrder = async (req, res) => {
       });
     }
 
+    const responseData = {
+      _id: order._id,
+      orderId: order.orderId,
+      userId: order.userId,
+      productId: order.visitingCardOrder?._id,
+      productName: order.orderDetails?.productName,
+      quantity: order.quantity,
+      itemPrice: order.itemPrice,
+      deliveryPrice: order.deliveryPrice,
+      totalPrice: order.totalPrice,
+      designFile: order.designFile,
+      orderStatus: order.orderStatus,
+      paymentStatus: order.paymentStatus,
+      shippingAddress: order.shippingAddress,
+      createdAt: order.createdAt,
+    };
+
     res.status(200).json({
       success: true,
       message: "Order fetched successfully",
-      data: order,
+      data: responseData,
     });
 
   } catch (error) {
@@ -865,35 +1014,28 @@ exports.getSingleOrder = async (req, res) => {
 };
 
 
+
 // ---------------- UPDATE ORDER BY ID ----------------
 exports.updateOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
 
-    // Allowed fields to update
-    const allowedUpdates = ["status", "addressId"];
+    // Allowed fields
+    const allowedUpdates = ["orderStatus", "paymentStatus", "shippingAddress"];
     const updates = {};
 
-    Object.keys(updateData).forEach((key) => {
+    Object.keys(req.body).forEach((key) => {
       if (allowedUpdates.includes(key)) {
-        updates[key] = updateData[key];
+        updates[key] = req.body[key];
       }
     });
-
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "No valid fields to update"
-      });
-    }
 
     const updatedOrder = await Order.findByIdAndUpdate(id, updates, {
       new: true,
       runValidators: true,
     })
-      .populate("userId", "name email mobile")
-      .populate("addressId");
+    .populate("userId", "name email mobile")
+    .populate("visitingCardOrder");
 
     if (!updatedOrder) {
       return res.status(404).json({
@@ -918,21 +1060,31 @@ exports.updateOrderById = async (req, res) => {
 };
 
 
+
 // ---------------- DELETE ORDER BY ID ----------------
 exports.deleteOrder = async (req, res) => {
   try {
-    const deleted = await Order.findByIdAndDelete(req.params.id);
+    const deletedOrder = await Order.findByIdAndDelete(req.params.id);
 
-    if (!deleted)
-      return res.status(404).json({ success: false, message: "Order not found" });
+    if (!deletedOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
 
     res.status(200).json({
       success: true,
       message: "Order deleted successfully",
-      deleted,
+      deleted: deletedOrder,
     });
+
   } catch (error) {
     console.error("Error deleting order:", error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 };
+

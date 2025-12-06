@@ -39,7 +39,7 @@ router.put('/cart/:id', updateCartById);
 router.delete('/cart/:id', deleteCartById);
 router.post('/create-order', createOrder);
 router.get('/getall-orders', getAllOrders);
-router.get('/getorder/:orderId', getOrderById);
+router.get('/getorder/:id', getOrderById);
 
 router.get('/myorders/:userId', getMyOrders);
 router.get('/mysingleorder/:id', getSingleOrder);
