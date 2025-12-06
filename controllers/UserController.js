@@ -145,7 +145,7 @@ const uploadDesignFileMiddleware = (req, res) => {
   });
 };
 
-// ✅ CREATE: Add to Cart (FIXED PRICE CALCULATION)
+// ✅ CREATE: Add to Cart (FIXED PRICE CALCULATION + FIXED QUANTITY CAST ERROR)
 exports.addToCart = async (req, res) => {
   try {
     await uploadDesignFileMiddleware(req, res);
@@ -204,7 +204,12 @@ exports.addToCart = async (req, res) => {
       designPath = `/uploads/userDesigns/${req.file.filename}`;
     }
 
-    // Calculate price based on quantity
+    // Convert visiting card quantity (array/string) → number
+    const fixedOrderQty = Array.isArray(visitingCard.quantity)
+      ? Number(visitingCard.quantity[0])
+      : Number(visitingCard.quantity);
+
+    // Calculate price
     const itemPrice = visitingCard.price * quantity;
     const deliveryPrice = visitingCard.deliveryPrice || 50;
     const totalPrice = itemPrice + deliveryPrice;
@@ -213,14 +218,19 @@ exports.addToCart = async (req, res) => {
     const newCartItem = new Cart({
       userId,
       visitingCardOrder: visitingCardId,
+
       orderDetails: {
         productCategory: visitingCard.productCategory,
         productName: visitingCard.productName,
         printingType: visitingCard.printingType,
-        quantity: visitingCard.quantity,
+
+        // 🛠️ FIX: Prevent cast error
+        quantity: fixedOrderQty,
+
         price: visitingCard.price,
         images: visitingCard.images || []
       },
+
       designFile: designPath || visitingCard.designFile || '',
       itemPrice,
       deliveryPrice,
@@ -233,7 +243,6 @@ exports.addToCart = async (req, res) => {
     // Get user details
     const userDetails = await User.findById(userId).select('name email mobile location');
 
-    // Prepare response with only required fields
     const responseData = {
       _id: newCartItem._id,
       userId: {
@@ -268,6 +277,7 @@ exports.addToCart = async (req, res) => {
     });
   }
 };
+
 
 // ---------------- GET ALL CART ITEMS (Modified) ----------------
 exports.getAllCartItems = async (req, res) => {
