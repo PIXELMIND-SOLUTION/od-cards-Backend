@@ -4,7 +4,6 @@ const { createFAQ, getAllFAQs, getFAQById, updateFAQ, deleteFAQ, deleteFAQImage,
 const { uploadFAQImageSingle } = require('../middleware/upload.js');
 const contactController = require('../controllers/contactInfoController');
 
-
 // Routes for FAQs
 router.post('/createfaq', uploadFAQImageSingle, createFAQ); // Create new FAQ
 router.get('/getallfaqs', getAllFAQs); // Get all FAQs
@@ -30,5 +29,10 @@ router.put('/update/:id', contactController.updateContactInfo);
 
 // Delete
 router.delete('/delete/:id', contactController.deleteContactInfo);
+
+
+
+
+
 
 module.exports = router;

@@ -1,5 +1,7 @@
+// Load environment variables FIRST before any other imports
+require('dotenv').config();
+
 const express = require('express');
-const dotenv = require('dotenv');
 const cors = require('cors');
 const connectDB = require('./config/db');
 const path = require('path');
@@ -11,14 +13,15 @@ const productRoutes = require('./routes/productRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const policyRoutes = require('./routes/policiesRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
-const aboutRoutes  = require('./routes/AboutRoutes'); // ✅ use consistent casing
+const aboutRoutes = require('./routes/AboutRoutes');
 const cardCategoryRoutes = require('./routes/cardCategoryRoutes');
 const AdminRoutes = require('./routes/AdminRoutes');
 const Contactus = require('./routes/AdminRoutes');
 const bannerRoutes = require('./routes/BannerRoutes');
 const marqueeRoutes = require('./routes/MarqueeRoutes');
+const visitingCard = require('./routes/visitingRoute');
 
-dotenv.config();
+// Connect to database
 connectDB();
 
 const app = express();
@@ -31,7 +34,6 @@ app.use(express.urlencoded({ extended: true }));
 // Static Folder for uploaded images
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use("/uploads/banners", express.static(path.join(__dirname, "uploads/banners")));
-
 
 // API Routes
 app.use('/api/users', userRoutes);
@@ -46,6 +48,14 @@ app.use('/api/admin', AdminRoutes);
 app.use('/api/contactus', Contactus);
 app.use("/api/banners", bannerRoutes);
 app.use('/api/marquees', marqueeRoutes);
+app.use('/api', visitingCard);
 
 const PORT = process.env.PORT || 9124;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log('Environment check:', {
+        cloudinary_name: process.env.CLOUDINARY_CLOUD_NAME ? '✓' : '✗',
+        cloudinary_key: process.env.CLOUDINARY_API_KEY ? '✓' : '✗',
+        cloudinary_secret: process.env.CLOUDINARY_API_SECRET ? '✓' : '✗'
+    });
+});

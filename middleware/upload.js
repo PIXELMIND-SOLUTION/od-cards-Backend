@@ -99,21 +99,15 @@ const bannerStorage = multer.diskStorage({
   }
 });
 
-
-//uplods design for add to cart 
-
-// === New: Upload Design Path ===
+// === User Design Upload ===
 const userDesignPath = path.join(__dirname, '../uploads/userDesigns');
 ensureDir(userDesignPath);
-
 const designStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, userDesignPath),
   filename: (req, file, cb) => {
     cb(null, `design_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${path.extname(file.originalname)}`);
   }
 });
-
-
 
 // === Multer Instances ===
 const uploadAboutImage = multer({ storage: aboutStorage, fileFilter });
@@ -126,7 +120,14 @@ const uploadFAQImage = multer({ storage: faqImageStorage, fileFilter });
 const uploadBannerImages = multer({ storage: bannerStorage, fileFilter });
 const uploadDesignFile = multer({ storage: designStorage, fileFilter });
 
-
+// === NEW: Combined Visiting Card Upload for multiple images and design file ===
+const uploadVisitingCardWithDesign = multer({ 
+  storage: visitingCardStorage, // Using visiting card storage for all files
+  fileFilter 
+}).fields([
+  { name: 'images', maxCount: 10 },
+  { name: 'design', maxCount: 1 }
+]);
 
 // === Exported Middleware ===
 module.exports = {
@@ -134,6 +135,7 @@ module.exports = {
 
   uploadVisitingCardImgSingle: uploadVisitingCardImg.single('image'),
   uploadVisitingCardImgMultiple: uploadVisitingCardImg.array('images', 10),
+  uploadVisitingCardWithDesign: uploadVisitingCardWithDesign, // ✅ Add this new middleware
 
   uploadBoardCardImages: uploadBoardCardImg.array('images', 10),
   uploadReviewImage: uploadReviewImg.single('image'),
@@ -144,6 +146,6 @@ module.exports = {
   uploadFAQImageSingle: uploadFAQImage.single('image'),
   uploadFAQImageMultiple: uploadFAQImage.array('images', 10),
 
-  uploadBannerImageMultiple: uploadBannerImages.array('images', 10), // ✅ Banner upload
+  uploadBannerImageMultiple: uploadBannerImages.array('images', 10),
   uploadDesignFile: uploadDesignFile.single('design')
 };
