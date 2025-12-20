@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { createFAQ, getAllFAQs, getFAQById, updateFAQ, deleteFAQ, deleteFAQImage, submitContactForm, getAllSubmissions, deleteSubmission } = require('../controllers/adminController.js');
+const { createFAQ, getAllFAQs, getFAQById, updateFAQ, deleteFAQ, deleteFAQImage, submitContactForm, getAllSubmissions, deleteSubmission,createAdminCharge,
+  getActiveAdminCharge,
+  getAllAdminCharges,
+  updateAdminCharge,
+  deleteAdminCharge } = require('../controllers/adminController.js');
 const { uploadFAQImageSingle } = require('../middleware/upload.js');
 const contactController = require('../controllers/contactInfoController');
 
@@ -32,7 +36,11 @@ router.delete('/delete/:id', contactController.deleteContactInfo);
 
 
 
-
+router.post("/charges", createAdminCharge);              // CREATE
+router.get("/charges/active", getActiveAdminCharge);    // READ (active)
+router.get("/charges", getAllAdminCharges);             // READ (all)
+router.put("/charges/:id", updateAdminCharge);          // UPDATE
+router.delete("/charges/:id", deleteAdminCharge);       // DELETE (soft)
 
 
 module.exports = router;

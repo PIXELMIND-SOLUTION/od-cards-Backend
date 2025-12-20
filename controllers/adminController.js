@@ -3,6 +3,7 @@ const FAQImage = require('../models/FAQImage');
 const Contact = require('../models/Contact');
 const fs = require('fs');
 const path = require('path');
+const AdminCharge = require("../models/AdminCharge");
 
 
 exports.createFAQ = async (req, res) => {
@@ -290,6 +291,171 @@ exports.deleteSubmission = async (req, res) => {
       success: false,
       message: 'Server Error',
       error: error.message
+    });
+  }
+};
+
+
+/* ================= CREATE / UPDATE ADMIN CHARGES ================= */
+/* Only ONE active record will exist */
+exports.createAdminCharge = async (req, res) => {
+  try {
+    const { deliveryPrice = 0, taxPrice = 0 } = req.body;
+
+    if (deliveryPrice < 0 || taxPrice < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Prices cannot be negative"
+      });
+    }
+
+    await AdminCharge.updateMany({}, { isActive: false });
+
+    const charge = await AdminCharge.create({
+      deliveryPrice,
+      taxPrice,
+      isActive: true
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Admin charges created",
+      data: charge
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+
+
+/* ================= GET ACTIVE ADMIN CHARGES ================= */
+exports.getActiveAdminCharge = async (req, res) => {
+  try {
+    const charge = await AdminCharge.findOne({ isActive: true });
+
+    if (!charge) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin charges not configured"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        deliveryPrice: charge.deliveryPrice,
+        taxPrice: charge.taxPrice,
+        updatedAt: charge.updatedAt
+      }
+    });
+
+  } catch (error) {
+    console.error("Get admin charges error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch admin charges",
+      error: error.message
+    });
+  }
+};
+
+
+/* ================= GET ALL ADMIN CHARGE HISTORY (OPTIONAL) ================= */
+exports.getAllAdminCharges = async (req, res) => {
+  try {
+    const charges = await AdminCharge.find().sort({ updatedAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: charges.length,
+      data: charges
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch admin charge history",
+      error: error.message
+    });
+  }
+};
+
+/* ================= UPDATE ADMIN CHARGE ================= */
+exports.updateAdminCharge = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { deliveryPrice, taxPrice, isActive } = req.body;
+
+    const charge = await AdminCharge.findById(id);
+
+    if (!charge) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin charge not found"
+      });
+    }
+
+    // If activating this charge, deactivate others
+    if (isActive === true) {
+      await AdminCharge.updateMany(
+        { _id: { $ne: id } },
+        { isActive: false }
+      );
+    }
+
+    if (deliveryPrice !== undefined) charge.deliveryPrice = deliveryPrice;
+    if (taxPrice !== undefined) charge.taxPrice = taxPrice;
+    if (isActive !== undefined) charge.isActive = isActive;
+
+    charge.updatedAt = new Date();
+    await charge.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Admin charge updated",
+      data: charge
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+
+/* ================= DELETE ADMIN CHARGE (SOFT DELETE) ================= */
+exports.deleteAdminCharge = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const charge = await AdminCharge.findById(id);
+
+    if (!charge) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin charge not found"
+      });
+    }
+
+    charge.isActive = false;
+    await charge.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Admin charge deleted (soft)"
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message
     });
   }
 };

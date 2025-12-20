@@ -221,11 +221,7 @@ const visitingCardOrderSchema = new mongoose.Schema({
   // ======================================
   // DESIGN FILE (CLOUDINARY URL)
   // ======================================
-  designFile: {
-    isEnabled: { type: Boolean, default: true },
-    value: String,
-    price: { type: Number, default: 0 }
-  },
+ 
 
   // ======================================
   // TOTAL PRICING

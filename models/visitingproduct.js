@@ -41,10 +41,9 @@ const userSelectedCardSchema = new mongoose.Schema({
   },
 
   // USER UPLOADED IMAGES
-  images: [String],
+  images: [],
 
-  // DESIGN FILE
-  designFile: String,
+
 
   totalPrice: {
     type: Number,
