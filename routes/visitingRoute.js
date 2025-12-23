@@ -4,31 +4,31 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Controller
 const {
-    createVisitingcards,
-    getAllVisitingcards,
-    getVisitingcardById,
-    getByCategoryName,
-    getBySubCategoryName,
-    getByProductName,
-    updateVisitingcard,
-    deleteVisitingcard,
+  createVisitingcards,
+  getAllVisitingcards,
+  getVisitingcardById,
+  getByCategoryName,
+  getBySubCategoryName,
+  getByProductName,
+  updateVisitingcard,
+  deleteVisitingcard,
 
-    createUserCard,
-    getAllUserCards,
-    getUserCardById,
-    getUserCardsByUser,
+  createUserCard,
+  getAllUserCards,
+  getUserCardById,
+  getUserCardsByUser,
 
-    updateUserCard,
-    deleteUserCard,
-    
-    addToCart,
+  updateUserCard,
+  deleteUserCard,
+
+  addToCart,
   getCartByUser,
   updateCartItem,
   removeCartItem,
   clearCart,
   getAllCarts,
   createOrderFromCart,
-    getOrderById,
+  getOrderById,
   getOrdersByUser,
   getAllOrders,
   updateOrderStatus,
@@ -88,7 +88,6 @@ router.get("/cart", getAllCarts);
 /* ==================== ORDER ROUTES ==================== */
 
 // Create order from cart
-router.post("/order/create", createOrderFromCart);
 router.post("/order/create", createOrderFromCart);
 router.get("/order/:orderId", getOrderById);
 router.get("/orders/user/:userId", getOrdersByUser);
