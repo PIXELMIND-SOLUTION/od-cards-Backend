@@ -222,17 +222,23 @@ const deleteVisitingcard = async (req, res) => {
 /* =====================================================
    👤 USER SELECTS PRODUCT
 ===================================================== */
-
 const createUserCard = async (req, res) => {
   try {
+    /* ================= FORM DATA ================= */
     const form = dotNotationToNested(req.body);
+
+    /* ================= MASTER PRODUCT ================= */
     const master = await VisitingCardOrder.findById(form.ProductId).lean();
-    if (!master) return res.status(404).json({ success: false });
+    if (!master) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found"
+      });
+    }
 
     /* ================= IMAGE UPLOAD ================= */
     let imageUrls = [];
-
-    if (req.files && req.files.length > 0) {
+    if (req.files?.length) {
       for (const file of req.files) {
         const upload = await uploadToCloudinary(
           file.buffer,
@@ -242,34 +248,75 @@ const createUserCard = async (req, res) => {
       }
     }
 
+    /* ================= NORMALIZE OPTIONS ================= */
     const pt = normalizeOptionField(master.printingType);
     const lt = normalizeOptionField(master.laminationType);
 
+    /* ================= SELECTED BASIC OPTIONS ================= */
     const selected = {
       quantity: Number(form.quantity || 1),
       printingType: findOption(pt.options, form.printingType),
       laminationType: findOption(lt.options, form.laminationType)
     };
 
+    /* ================= SELECTED FEATURES ================= */
+    const selectedFeatures = {};
+
+    if (form.features && master.features) {
+      for (const key in form.features) {
+        if (master.features[key]?.options) {
+          const option = findOption(
+            master.features[key].options,
+            form.features[key]
+          );
+
+          if (option) {
+            selectedFeatures[key] = option;
+          }
+        }
+      }
+    }
+
+    /* ================= PRICE CALCULATION ================= */
     let total =
       safePrice(selected.printingType) +
       safePrice(selected.laminationType);
 
+    // ➕ add features price
+    for (const key in selectedFeatures) {
+      total += safePrice(selectedFeatures[key]);
+    }
+
     total *= selected.quantity;
 
+    /* ================= SAVE USER CARD ================= */
     const card = await UserSelectedCard.create({
       userId: form.userId,
       ProductId: form.ProductId,
-      selectedOptions: selected,
-      images: imageUrls, 
+      selectedOptions: {
+        ...selected,
+        features: selectedFeatures
+      },
+      images: imageUrls,
       totalPrice: total
     });
 
-    res.status(201).json({ success: true, data: card });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
+    /* ================= RESPONSE ================= */
+    res.status(201).json({
+      success: true,
+      message: "User card created successfully",
+      data: card
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to create user card",
+      error: error.message
+    });
   }
 };
+
 
 const getAllUserCards = async (req, res) => {
   try {
