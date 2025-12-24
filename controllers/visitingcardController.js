@@ -100,7 +100,7 @@ const createVisitingcards = async (req, res) => {
         const upload = await uploadToCloudinary(
           file.buffer,
           "visiting/images"
-          );
+        );
         imageUrls.push(upload.secure_url);
       }
     }
@@ -248,20 +248,41 @@ const createUserCard = async (req, res) => {
       }
     }
 
-    /* ================= NORMALIZE OPTIONS ================= */
-    const pt = normalizeOptionField(master.printingType);
-    const lt = normalizeOptionField(master.laminationType);
-
-    /* ================= SELECTED BASIC OPTIONS ================= */
-    const selected = {
-      quantity: Number(form.quantity || 1),
-      printingType: findOption(pt.options, form.printingType),
-      laminationType: findOption(lt.options, form.laminationType)
+    /* ================= HELPER ================= */
+    const pickOption = (masterField, selectedValue) => {
+      if (!masterField || !selectedValue) return null;
+      const normalized = normalizeOptionField(masterField);
+      return findOption(normalized.options, selectedValue);
     };
 
-    /* ================= SELECTED FEATURES ================= */
-    const selectedFeatures = {};
+    /* ================= SELECTED OPTIONS ================= */
+    const selectedOptions = {
+      quantity: Number(form.quantity || 1),
 
+      printingType: pickOption(master.printingType, form.printingType),
+      laminationType: pickOption(master.laminationType, form.laminationType),
+
+      size: pickOption(master.size, form.size),
+      demmySize: pickOption(master.demmySize, form.demmySize),
+      cardSizeMultiplier: pickOption(
+        master.cardSizeMultiplier,
+        form.cardSizeMultiplier
+      ),
+
+      boardType: pickOption(master.boardType, form.boardType),
+      boardThickness: pickOption(master.boardThickness, form.boardThickness),
+      paperType: pickOption(master.paperType, form.paperType),
+      gsm: pickOption(master.gsm, form.gsm),
+
+      specialOptions: pickOption(
+        master.specialOptions,
+        form.specialOptions
+      ),
+
+      features: {}
+    };
+
+    /* ================= FEATURES ================= */
     if (form.features && master.features) {
       for (const key in form.features) {
         if (master.features[key]?.options) {
@@ -269,34 +290,47 @@ const createUserCard = async (req, res) => {
             master.features[key].options,
             form.features[key]
           );
-
           if (option) {
-            selectedFeatures[key] = option;
+            selectedOptions.features[key] = option;
           }
         }
       }
     }
 
     /* ================= PRICE CALCULATION ================= */
-    let total =
-      safePrice(selected.printingType) +
-      safePrice(selected.laminationType);
+    let total = 0;
 
-    // ➕ add features price
-    for (const key in selectedFeatures) {
-      total += safePrice(selectedFeatures[key]);
+    const priceFields = [
+      "printingType",
+      "laminationType",
+      "size",
+      "demmySize",
+      "cardSizeMultiplier",
+      "boardType",
+      "boardThickness",
+      "paperType",
+      "gsm",
+      "specialOptions"
+    ];
+
+    // Base options
+    for (const field of priceFields) {
+      total += safePrice(selectedOptions[field]);
     }
 
-    total *= selected.quantity;
+    // Feature prices
+    for (const key in selectedOptions.features) {
+      total += safePrice(selectedOptions.features[key]);
+    }
 
-    /* ================= SAVE USER CARD ================= */
+    // Quantity multiplier
+    total *= selectedOptions.quantity;
+
+    /* ================= SAVE ================= */
     const card = await UserSelectedCard.create({
       userId: form.userId,
       ProductId: form.ProductId,
-      selectedOptions: {
-        ...selected,
-        features: selectedFeatures
-      },
+      selectedOptions,
       images: imageUrls,
       totalPrice: total
     });
@@ -309,6 +343,7 @@ const createUserCard = async (req, res) => {
     });
 
   } catch (error) {
+    console.error("Create User Card Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to create user card",
@@ -318,10 +353,11 @@ const createUserCard = async (req, res) => {
 };
 
 
+
 const getAllUserCards = async (req, res) => {
   try {
     console.log("Fetching all user cards...");
-    
+
     // Add timeout to the query
     const cards = await UserSelectedCard.find()
       .populate({
@@ -336,16 +372,16 @@ const getAllUserCards = async (req, res) => {
       .lean(); // Use lean() for faster queries
 
     console.log(`Found ${cards.length} user cards`);
-    
-    res.json({ 
-      success: true, 
-      count: cards.length, 
-      data: cards 
+
+    res.json({
+      success: true,
+      count: cards.length,
+      data: cards
     });
   } catch (e) {
     console.error("Error fetching user cards:", e);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       error: e.message,
       message: "Failed to fetch user cards. Please try again."
     });
@@ -439,7 +475,7 @@ const deleteUserCard = async (req, res) => {
    ADD TO CART (instructions as ARRAY)
 ===================================================== */
 const addToCart = async (req, res) => {
- try {
+  try {
     const { userSelectedCardId, quantity = 1 } = req.body;
 
     /* ---------- Validation ---------- */
@@ -843,6 +879,7 @@ const getOrdersByUser = async (req, res) => {
     const { userId } = req.params;
 
     const orders = await VisitingOrder.find({ userId })
+      .populate("cartId")
       .sort({ createdAt: -1 });
 
     res.json({
